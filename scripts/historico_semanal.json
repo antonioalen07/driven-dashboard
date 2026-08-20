@@ -1,0 +1,355 @@
+[
+ {
+  "fecha": "2026-03-02",
+  "total_conversaciones": 61,
+  "lead_calificado": 28,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 48,
+  "mala_experiencia": 3,
+  "consulta_comercial": 0,
+  "inconclusa": 22,
+  "tasa_resolucion_pct": 78.7,
+  "score_promedio": 3.54,
+  "productos_top": [
+   "carpa inflable",
+   "arrancador y compresor"
+  ],
+  "problemas": [
+   "Fricción por falta de sucursales fuera de Pergamino",
+   "Incapacidad para responder consultas técnicas específicas"
+  ],
+  "tasa_original_excel": 51.0
+ },
+ {
+  "fecha": "2026-03-09",
+  "total_conversaciones": 140,
+  "lead_calificado": 60,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 92,
+  "mala_experiencia": 3,
+  "consulta_comercial": 0,
+  "inconclusa": 93,
+  "tasa_resolucion_pct": 65.7,
+  "score_promedio": 3.65,
+  "productos_top": [
+   "Gato todo terreno",
+   "Carro Trek",
+   "Arrancador Batería Compresor"
+  ],
+  "problemas": [
+   "Consultas sobre ubicación y sucursales",
+   "Fallas en la búsqueda de productos del catálogo",
+   "Preguntas técnicas no resueltas"
+  ],
+  "tasa_original_excel": 6.4
+ },
+ {
+  "fecha": "2026-03-16",
+  "total_conversaciones": 111,
+  "lead_calificado": 41,
+  "ventas_rolo_v1": 2,
+  "enviado_a_web": 81,
+  "mala_experiencia": 5,
+  "consulta_comercial": 0,
+  "inconclusa": 12,
+  "tasa_resolucion_pct": 73.0,
+  "score_promedio": 3.7,
+  "productos_top": [
+   "carpa inflable",
+   "arrancador compresor"
+  ],
+  "problemas": [
+   "producto no encontrado en catálogo (visto en IG)",
+   "mala interpretación de sinónimos/tipos de producto"
+  ],
+  "tasa_original_excel": 51.8
+ },
+ {
+  "fecha": "2026-03-23",
+  "total_conversaciones": 122,
+  "lead_calificado": 25,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 87,
+  "mala_experiencia": 10,
+  "consulta_comercial": 74,
+  "inconclusa": 12,
+  "tasa_resolucion_pct": 71.3,
+  "score_promedio": 3.5,
+  "productos_top": [
+   "calentador portátil",
+   "carpa inflable"
+  ],
+  "problemas": [
+   "Bot no encuentra productos existentes en catálogo",
+   "Fallas en flujo conversacional (loops, respuestas repetidas)"
+  ]
+ },
+ {
+  "fecha": "2026-03-30",
+  "total_conversaciones": 179,
+  "lead_calificado": 30,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 122,
+  "mala_experiencia": 6,
+  "consulta_comercial": 101,
+  "inconclusa": 41,
+  "tasa_resolucion_pct": 68.2,
+  "score_promedio": 4.1,
+  "productos_top": [
+   "Kit pala multifunción outdoor",
+   "Calentador portátil FLAMATE",
+   "Carpa inflable Alpina PRO"
+  ],
+  "problemas": [
+   "Fallo en búsqueda de soportes para pala (ofrece portatermos)",
+   "Fallo al buscar baúles para camioneta",
+   "Consultas de seguimiento de envío donde el bot no tiene acceso"
+  ]
+ },
+ {
+  "fecha": "2026-04-06",
+  "total_conversaciones": 155,
+  "lead_calificado": 27,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 95,
+  "mala_experiencia": 2,
+  "consulta_comercial": 105,
+  "inconclusa": 20,
+  "tasa_resolucion_pct": 61.3,
+  "score_promedio": 3.7,
+  "productos_top": [
+   "Kit supervivencia outdoor",
+   "Carpas inflables",
+   "Calentador portátil auto",
+   "Beneficio Veteranos de Malvinas"
+  ],
+  "problemas": [
+   "Falta de cobertura de envíos internacionales (España, Uruguay)",
+   "Quiebre de stock o consultas sobre productos no trabajados (Carpas rígidas, Racks)",
+   "Algunos bucles por falta de respuesta del usuario (ruido o imágenes vacías)"
+  ]
+ },
+ {
+  "fecha": "2026-04-13",
+  "total_conversaciones": 130,
+  "lead_calificado": 18,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 75,
+  "mala_experiencia": 1,
+  "consulta_comercial": 107,
+  "inconclusa": 3,
+  "tasa_resolucion_pct": 57.7,
+  "score_promedio": 3.7,
+  "productos_top": [
+   "Kit pala multifunción outdoor",
+   "Calentador portátil Flamate para termo",
+   "Carpa inflable Alpina PRO / Flow Tech",
+   "Cocina Anafe Flamate"
+  ],
+  "problemas": [
+   "Quiebre de stock recurrente en calentadores Flamate 12v/24v",
+   "Falta de especificaciones técnicas precisas (tiempos de ebullición, presiones mínimas, anclajes de carpas)"
+  ]
+ },
+ {
+  "fecha": "2026-04-20",
+  "total_conversaciones": 166,
+  "lead_calificado": 14,
+  "ventas_rolo_v1": 3,
+  "enviado_a_web": 110,
+  "mala_experiencia": 1,
+  "consulta_comercial": 115,
+  "inconclusa": 34,
+  "tasa_resolucion_pct": 66.3,
+  "score_promedio": 3.9,
+  "productos_top": [
+   "Kit supervivencia outdoor",
+   "Carpa inflable Alpina PRO",
+   "Termos y calentadores de agua portátiles",
+   "Bolsas de dormir"
+  ],
+  "problemas": [
+   "Consultas sobre carpas de techo no tienen un link directo claro y resolutivo",
+   "Falta de comprensión ante menciones de marcas competidoras (ej. Stanley)"
+  ]
+ },
+ {
+  "fecha": "2026-04-27",
+  "total_conversaciones": 118,
+  "lead_calificado": 11,
+  "ventas_rolo_v1": 2,
+  "enviado_a_web": 54,
+  "mala_experiencia": 3,
+  "consulta_comercial": 91,
+  "inconclusa": 11,
+  "tasa_resolucion_pct": 45.8,
+  "score_promedio": 3.8,
+  "productos_top": [
+   "Kit pala multifunción outdoor",
+   "Carpas inflables (Alpina PRO, Flow Tech)",
+   "Termos e hidratación",
+   "Compresores y arrancadores"
+  ],
+  "problemas": [
+   "Derivación inmediata ante preguntas técnicas de medidas, autonomía eléctrica o compatibilidad",
+   "En algunos flujos omite escribir la URL o envía link a MercadoLibre en vez de la web propia",
+   "No reconoce bien repuestos puntuales o sinónimos (ej: arcandar = arrancador)"
+  ]
+ },
+ {
+  "fecha": "2026-05-04",
+  "total_conversaciones": 86,
+  "lead_calificado": 20,
+  "ventas_rolo_v1": 1,
+  "enviado_a_web": 56,
+  "mala_experiencia": 1,
+  "consulta_comercial": 34,
+  "inconclusa": 30,
+  "tasa_resolucion_pct": 65.1,
+  "score_promedio": 3.8,
+  "productos_top": [
+   "Kit supervivencia outdoor",
+   "Carpa inflable",
+   "Compresor",
+   "Calentador Flamate"
+  ],
+  "problemas": [
+   "Fricciones en el cálculo de envíos en la web para ciertas provincias",
+   "Consultas por repuestos o productos que no están en catálogo"
+  ]
+ },
+ {
+  "fecha": "2026-05-11",
+  "total_conversaciones": 86,
+  "lead_calificado": 16,
+  "ventas_rolo_v1": 8,
+  "enviado_a_web": 51,
+  "mala_experiencia": 2,
+  "consulta_comercial": 55,
+  "inconclusa": 5,
+  "tasa_resolucion_pct": 59.3,
+  "score_promedio": 3.8,
+  "productos_top": [
+   "Carpas inflables (Alpina PRO, Casita)",
+   "Compresores portátiles y arrancadores",
+   "Termos de acero inoxidable y mates",
+   "Calentador de agua FLAMATE 12V"
+  ],
+  "problemas": [
+   "Consultas por productos fuera de catálogo (colchones inflables sueltos, equipos de pesca)",
+   "Solicitudes técnicas sobre instalación y uso que derivan a humanos",
+   "Reclamos de postventa por productos defectuosos (bolsas de agua, bases de termos)"
+  ]
+ },
+ {
+  "fecha": "2026-05-18",
+  "total_conversaciones": 128,
+  "lead_calificado": 31,
+  "ventas_rolo_v1": 13,
+  "enviado_a_web": 62,
+  "mala_experiencia": 8,
+  "consulta_comercial": 73,
+  "inconclusa": 3,
+  "tasa_resolucion_pct": 48.4,
+  "score_promedio": 3.9,
+  "productos_top": [
+   "Compresores portátiles",
+   "Carpas inflables Alpina",
+   "Anafes Flamate",
+   "Bolsos organizadores"
+  ],
+  "problemas": [
+   "Links a la web que dan error o no son visibles",
+   "Diferencias de precio entre la web, el bot, Mercado Libre y stands físicos",
+   "Falta de stock o productos no publicados como arrancadores y repuestos"
+  ]
+ },
+ {
+  "fecha": "2026-05-25",
+  "total_conversaciones": 63,
+  "lead_calificado": 8,
+  "ventas_rolo_v1": 11,
+  "enviado_a_web": 34,
+  "mala_experiencia": 6,
+  "consulta_comercial": 24,
+  "inconclusa": 14,
+  "tasa_resolucion_pct": 54.0,
+  "score_promedio": 3.4,
+  "productos_top": [
+   "Compresores portátiles (Bestia Digital, ABS, TITAN 4K)",
+   "Carpas inflables (Alpina PRO, Casita)",
+   "Anafes y calentadores Flamate",
+   "Bolsas de dormir de frío extremo (INVI)"
+  ],
+  "problemas": [
+   "Falta de especificaciones técnicas detalladas (medidas, potencia, certificados de bidones)",
+   "Reclamos postventa por productos recibidos con piezas faltantes o defectos",
+   "El bot no reconoce promociones activas o precios publicados en Instagram"
+  ]
+ },
+ {
+  "fecha": "2026-06-01",
+  "total_conversaciones": 123,
+  "lead_calificado": 27,
+  "ventas_rolo_v1": 10,
+  "enviado_a_web": 56,
+  "mala_experiencia": 7,
+  "consulta_comercial": 68,
+  "inconclusa": 11,
+  "tasa_resolucion_pct": 45.5,
+  "score_promedio": 3.8,
+  "productos_top": [
+   "Carpa inflable",
+   "Calentador Flamate",
+   "Bolso herramientas",
+   "Termos y picos"
+  ],
+  "problemas": [
+   "Discrepancia de precios por Hot Sale en la web",
+   "Faltante de stock de repuestos (tapas de termos)",
+   "Reclamos de productos defectuosos (compresores y termos)"
+  ]
+ },
+ {
+  "fecha": "2026-06-08",
+  "total_conversaciones": 170,
+  "lead_calificado": 17,
+  "ventas_rolo_v1": 10,
+  "enviado_a_web": 89,
+  "mala_experiencia": 7,
+  "consulta_comercial": 105,
+  "inconclusa": 31,
+  "tasa_resolucion_pct": 52.4,
+  "score_promedio": 3.9,
+  "productos_top": [
+   "Calentador Flamate",
+   "Carpa inflable de techo BOTE",
+   "Carpa inflable Alpina PRO"
+  ],
+  "problemas": [
+   "Falta de especificaciones técnicas detalladas (dimensiones exactas/cerrado)",
+   "Gestión de reclamos y garantías sin flujo de contención",
+   "Faltantes de catálogo frecuentes (gazebos, colchones, repuestos Contigo)"
+  ]
+ },
+ {
+  "fecha": "2026-06-15",
+  "total_conversaciones": 152,
+  "lead_calificado": 18,
+  "ventas_rolo_v1": 18,
+  "enviado_a_web": 89,
+  "mala_experiencia": 7,
+  "consulta_comercial": 46,
+  "inconclusa": 42,
+  "tasa_resolucion_pct": 58.6,
+  "score_promedio": 3.8,
+  "productos_top": [
+   "Bolso enrollable para herramientas",
+   "Calentador Flamate"
+  ],
+  "problemas": [
+   "Quiebre de stock en bolsos y carpas de techo",
+   "Confusión con costos de envío y precios Hot Sale"
+  ]
+ }
+]

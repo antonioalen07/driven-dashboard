@@ -1,0 +1,8 @@
+# Para levantarlo local y probarlo antes de subir a EasyPanel:
+#   docker compose up --build   ->  http://localhost:8080
+services:
+  dashboard:
+    build: .
+    ports:
+      - "8080:80"
+    restart: unless-stopped

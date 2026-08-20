@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Driven · Panel de Resultados</title>
+<meta name="description" content="Resultados del agente Rolo: tráfico a la web, leads y atribución de ventas.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-in">
+    <div class="logo">
+      <div class="mark">D</div>
+      <div class="txt">
+        <div class="t1">Driven</div>
+        <div class="t2">Panel de resultados · Rolo</div>
+      </div>
+    </div>
+
+    <label class="sr" for="fMes">Filtrar por mes</label>
+    <select class="btn" id="fMes" aria-label="Filtrar por mes"></select>
+
+    <div class="seg" role="group" aria-label="Vista">
+      <button data-view="gestion" aria-pressed="true">Gestión</button>
+      <button data-view="ventas" aria-pressed="false">Ventas</button>
+    </div>
+
+    <button class="btn" id="bTema" aria-label="Cambiar tema">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z"/></svg>
+      Tema
+    </button>
+    <button class="btn" id="bCsv">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 21h16"/></svg>
+      CSV
+    </button>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="avisos"></div>
+
+  <!-- ====================== VISTA GESTIÓN ====================== -->
+  <section id="v-gestion">
+    <div class="head">
+      <h2>Resumen de gestión</h2>
+      <p id="sub-gestion">—</p>
+    </div>
+    <div class="kpis" id="kpis-gestion"></div>
+
+    <div class="grid g-2" style="margin-top:var(--sp-3)">
+      <div class="card">
+        <h3>Evolución semanal</h3>
+        <p class="hint">Conversaciones atendidas y cuántas terminaron con un link a la web.</p>
+        <div class="legend" id="lg-evo"></div>
+        <div class="chartbox" id="ch-evo"></div>
+      </div>
+      <div class="card">
+        <h3>Desenlace de conversaciones</h3>
+        <p class="hint">Acumulado del período.</p>
+        <div class="chartbox" id="ch-mix"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:var(--sp-3)">
+      <h3>Tasa de resolución</h3>
+      <p class="hint">Porcentaje de conversaciones que terminaron con un link a driven.com.ar. La línea punteada es el promedio del período.</p>
+      <div class="chartbox" id="ch-tasa"></div>
+    </div>
+
+    <div class="grid g-2e" style="margin-top:var(--sp-3)">
+      <div class="card">
+        <h3>Productos más consultados</h3>
+        <p class="hint">Lo que más pregunta la gente, por frecuencia en el período.</p>
+        <div id="prods"></div>
+      </div>
+      <div class="card">
+        <h3>Qué corregir</h3>
+        <p class="hint">Problemas detectados con más frecuencia.</p>
+        <div id="probs"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:var(--sp-3)">
+      <h3>Detalle por semana</h3>
+      <p class="hint">Clic en el encabezado para ordenar.</p>
+      <div class="tw"><table id="t-sem">
+        <thead><tr>
+          <th class="sortable" data-k="fecha">Semana</th>
+          <th class="sortable n" data-k="total_conversaciones">Convs</th>
+          <th class="sortable n" data-k="enviado_a_web">A la web</th>
+          <th class="sortable n" data-k="tasa_resolucion_pct">Tasa</th>
+          <th class="sortable n" data-k="lead_calificado">Leads</th>
+          <th class="sortable n" data-k="mala_experiencia">Mala exp.</th>
+          <th class="sortable n" data-k="score_promedio">Score</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <!-- ====================== VISTA VENTAS ====================== -->
+  <section id="v-ventas" hidden>
+    <div class="head">
+      <h2>Ventas y atribución</h2>
+      <p id="sub-ventas">—</p>
+    </div>
+    <div class="kpis" id="kpis-ventas"></div>
+
+    <div class="grid g-2" style="margin-top:var(--sp-3)">
+      <div class="card">
+        <h3>Facturación por día</h3>
+        <p class="hint">Ventas confirmadas en el CRM, provenientes de TiendaNube.</p>
+        <div class="legend" id="lg-vta"></div>
+        <div class="chartbox" id="ch-vta"></div>
+      </div>
+      <div class="card">
+        <h3>Atribución</h3>
+        <p class="hint">Cuánto de la facturación se le atribuye a Rolo.</p>
+        <div class="chartbox" id="ch-torta"></div>
+        <div id="torta-leg"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:var(--sp-3)">
+      <h3>Ventas del período</h3>
+      <p class="hint">Cada venta ganada en el CRM, con su estado de atribución.</p>
+      <div class="tw"><table id="t-vta">
+        <thead><tr>
+          <th>Fecha</th><th>Cliente</th><th>Oportunidad</th>
+          <th class="n">Monto</th><th>Atribución</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <footer class="ft">
+    <span>Datos: CRM GoHighLevel · TiendaNube · histórico Rolo v1</span>
+    <span>Generado por <b>Crevy</b> · <span id="gen"></span></span>
+  </footer>
+</div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

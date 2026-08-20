@@ -1,0 +1,23 @@
+# EasyPanel resuelve el dominio y el TLS por fuera: acá basta con escuchar en :80.
+:80 {
+	root * /srv
+	file_server
+	encode gzip zstd
+
+	# El panel es de uso interno: no queremos que quede cacheado un dato viejo.
+	header /data.js Cache-Control "no-store"
+	header /*.html  Cache-Control "no-store"
+	header /*.css   Cache-Control "max-age=3600"
+	header /*.js    Cache-Control "max-age=3600"
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
