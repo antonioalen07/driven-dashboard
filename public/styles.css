@@ -287,8 +287,10 @@ td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowra
 }
 .chip .dot { width: 7px; height: 7px; border-radius: 999px; flex: none; }
 
-.bar-mini { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.bar-mini .track { width: 46px; height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; }
+.bar-mini { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
+/* Ancho suficiente para que la proporción se lea de un vistazo. */
+.bar-mini .track { width: 74px; height: 6px; background: var(--surface-3); border-radius: 999px; overflow: hidden; flex: none; }
+.bar-mini b { min-width: 52px; text-align: right; }
 .bar-mini .fill { height: 100%; border-radius: 999px; }
 
 /* ---------------- avisos ---------------- */
