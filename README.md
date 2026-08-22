@@ -11,8 +11,8 @@ como archivo local o servir con Docker en EasyPanel.
 ## Qué muestra
 
 **Vista Gestión** — el desempeño conversacional del agente
-- Conversaciones atendidas, enviadas a la web, tasa de resolución, leads, score
-- Evolución semanal (barras + línea, una sola escala)
+- Conversaciones atendidas, enviadas a la web, tasa de resolución, leads, **ventas atribuidas a Rolo**, score
+- Evolución semanal (barras + línea) con panel propio de ventas atribuidas
 - Desenlace de las conversaciones
 - Tasa de resolución con promedio del período
 - Productos más consultados y problemas más frecuentes
@@ -24,7 +24,14 @@ como archivo local o servir con Docker en EasyPanel.
 - Dona de atribución
 - Detalle de cada venta con su estado
 
-**Filtro por mes** en toda la aplicación, tema claro/oscuro y export CSV.
+**Filtros de período** en toda la aplicación:
+- **Todo el período** — el histórico completo
+- **Por mes** — un mes puntual
+- **Por día** — una fecha exacta
+- **Personalizado** — rango libre entre dos fechas
+
+Los KPIs comparan contra el período anterior del mismo largo. Tema claro/oscuro y
+export CSV (respeta el filtro activo).
 
 ---
 

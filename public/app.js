@@ -7,7 +7,9 @@
 'use strict';
 
 const D = window.DRIVEN_DATA || { semanas_historico: [], dias_ventas: [], meses: [] };
-let MES  = 'todos';
+// Filtro de período: modo + rango efectivo [desde, hasta] en ISO.
+// 'todos' = sin límites; 'mes' = un mes; 'dia' = un día; 'custom' = a medida.
+let FILTRO = { modo: 'todos', desde: null, hasta: null, mes: null, dia: null };
 let VIEW = 'gestion';
 let SORT = { k: 'fecha', dir: -1 };
 const OCULTAS = new Set();   // series apagadas desde la leyenda
@@ -34,8 +36,39 @@ const dLong = f => day(f).toLocaleDateString('es-AR', { weekday:'long', day:'num
 const mLab  = m => { const [y,mm] = m.split('-'); return new Date(+y, +mm-1, 1)
   .toLocaleDateString('es-AR', { month:'long', year:'numeric' }); };
 
-const semanas = () => D.semanas_historico.filter(s => MES === 'todos' || s.fecha.startsWith(MES));
-const dias    = () => D.dias_ventas.filter(d => MES === 'todos' || d.fecha.startsWith(MES));
+/* Una sola función decide si una fecha entra en el período elegido.
+   Así los dos datasets (semanas y días) filtran con el mismo criterio. */
+function enRango(fecha) {
+  const f = String(fecha).slice(0,10);
+  if (FILTRO.modo === 'todos') return true;
+  if (FILTRO.desde && f < FILTRO.desde) return false;
+  if (FILTRO.hasta && f > FILTRO.hasta) return false;
+  return true;
+}
+/* Una semana del histórico cubre 7 días: entra si su ventana se solapa
+   con el período, no solo si su fecha de inicio cae adentro. */
+function semanaEnRango(fechaIni) {
+  if (FILTRO.modo === 'todos') return true;
+  const ini = String(fechaIni).slice(0,10);
+  const d = day(ini); d.setDate(d.getDate() + 6);
+  const p = n => String(n).padStart(2,'0');
+  const fin = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  if (FILTRO.hasta && ini > FILTRO.hasta) return false;
+  if (FILTRO.desde && fin < FILTRO.desde) return false;
+  return true;
+}
+const semanas = () => D.semanas_historico.filter(s => semanaEnRango(s.fecha));
+const dias    = () => D.dias_ventas.filter(d => enRango(d.fecha));
+
+/* Texto legible del período, para los subtítulos. */
+function etiquetaPeriodo() {
+  if (FILTRO.modo === 'todos')  return 'Todo el período';
+  if (FILTRO.modo === 'mes')    return mLab(FILTRO.mes).replace(/^./, c => c.toUpperCase());
+  if (FILTRO.modo === 'dia')    return dLong(FILTRO.dia).replace(/^./, c => c.toUpperCase());
+  const d = FILTRO.desde ? dLab(FILTRO.desde) : '…';
+  const h = FILTRO.hasta ? dLab(FILTRO.hasta) : '…';
+  return `${d} — ${h}`;
+}
 
 const NS = 'http://www.w3.org/2000/svg';
 const el = (t, a) => { const n = document.createElementNS(NS, t);
@@ -108,16 +141,18 @@ function renderKpisGestion() {
          delta: prev.length && pConvs ? deltaHtml(tasa, pWeb/pConvs*100, {pct:true}) : null}),
     kpi({lab:'Leads calificados', val:fmt(sum('lead_calificado')), accent:css('--s3'),
          sub:'con interés de compra'}),
-    kpi({lab:'Malas experiencias', val:fmt(sum('mala_experiencia')), accent:css('--s1'),
-         sub:'a revisar', delta: null}),
+    kpi({lab:'Ventas de Rolo', val:fmt(sum('ventas_rolo_v1')), accent:css('--s1'),
+         sub:'atribuidas en el período',
+         delta: prev.length ? deltaHtml(sum('ventas_rolo_v1'), pSum('ventas_rolo_v1')) : null,
+         tip:'Ventas que el análisis semanal de la versión anterior de Rolo le atribuyó al agente.'}),
+    kpi({lab:'Malas experiencias', val:fmt(sum('mala_experiencia')), accent:css('--bad'),
+         sub:'a revisar'}),
     kpi({lab:'Score de atención', val:dec2(score)+'<small>/5</small>',
          sub:'promedio del período'}),
   ].join('');
 
   document.getElementById('sub-gestion').textContent =
-    MES === 'todos'
-      ? `Histórico completo · ${s.length} semanas (${dLab(s[0].fecha)} — ${dLab(s.at(-1).fecha)})`
-      : `${mLab(MES)} · ${s.length} semana${s.length>1?'s':''}`;
+    `${etiquetaPeriodo()} · ${s.length} semana${s.length>1?'s':''} (${dLab(s[0].fecha)} — ${dLab(s.at(-1).fecha)})`;
 }
 
 function renderKpisVentas() {
@@ -148,9 +183,7 @@ function renderKpisVentas() {
   ].join('');
 
   document.getElementById('sub-ventas').textContent =
-    MES === 'todos'
-      ? `Todas las ventas registradas · ${dLab(v[0].fecha)} — ${dLab(v.at(-1).fecha)}`
-      : `${mLab(MES)} · ${fmt(n)} ventas`;
+    `${etiquetaPeriodo()} · ${fmt(n)} venta${n!==1?'s':''} · ${dLab(v[0].fecha)} — ${dLab(v.at(-1).fecha)}`;
 }
 
 /* ============================================================
@@ -164,13 +197,21 @@ function renderEvo() {
   if (!s.length) { box.innerHTML = '<p class="empty">Sin datos en el período.</p>'; leg.innerHTML=''; return; }
 
   const SER = [
-    { k:'enviado_a_web',        lab:'Enviados a la web', color: css('--s2'), tipo:'bar' },
+    { k:'enviado_a_web',        lab:'Enviados a la web', color: css('--s2'),    tipo:'bar' },
     { k:'total_conversaciones', lab:'Conversaciones',    color: css('--ink-3'), tipo:'line' },
   ];
+  // Las ventas van en su propio panel debajo: su escala (1-18) es tan chica
+  // frente a las conversaciones (60-180) que en el mismo eje serian una
+  // linea plana pegada al piso. Dos escalas en un plot enganan; dos plots no.
+  const VENTAS_SERIE = { k:'ventas_rolo_v1', lab:'Ventas de Rolo', color: css('--s1') };
   leg.innerHTML = SER.map(x => `
     <button class="it" data-serie="${x.k}" aria-pressed="${!OCULTAS.has(x.k)}">
       <span class="sw" style="background:${x.color};${x.tipo==='line'?'height:3px;width:16px;border-radius:999px':''}"></span>${esc(x.lab)}
     </button>`).join('');
+  if (s.some(d => num(d.ventas_rolo_v1) > 0)) {
+    leg.insertAdjacentHTML('beforeend',
+      `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Ventas de Rolo (escala propia)</span>`);
+  }
   leg.querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.serie;
     OCULTAS.has(k) ? OCULTAS.delete(k) : OCULTAS.add(k);
@@ -178,7 +219,9 @@ function renderEvo() {
   });
 
   const vis = SER.filter(x => !OCULTAS.has(x.k));
-  const W = 760, H = 280, m = { t:16, r:16, b:38, l:44 };
+  const hayVentas = s.some(d => num(d[VENTAS_SERIE.k]) > 0);
+  const HV = hayVentas ? 92 : 0;         // alto del panel de ventas (con aire)
+  const W = 760, H = 280 + HV, m = { t:16, r:16, b:38 + HV, l:44 };
   const iw = W-m.l-m.r, ih = H-m.t-m.b;
   const maxV = Math.max(1, ...s.flatMap(d => vis.map(x => num(d[x.k]))));
   const top = niceMax(maxV);
@@ -219,16 +262,44 @@ function renderEvo() {
   const step = Math.max(1, Math.ceil(s.length/8));
   s.forEach((d,i) => {
     if ((s.length-1-i) % step !== 0) return;
-    const t = el('text',{ x:cx(i), y:H-12, 'text-anchor':'middle' });
+    const t = el('text',{ x:cx(i), y:m.t+ih+17, 'text-anchor':'middle' });
     t.textContent = dLab(d.fecha); svg.appendChild(t);
   });
   svg.appendChild(el('line',{ class:'gridline', x1:m.l, x2:W-m.r, y1:m.t+ih, y2:m.t+ih }));
+
+  // --- Panel inferior: ventas atribuidas a Rolo (escala propia) ---
+  if (hayVentas) {
+    const vTop = niceMax(Math.max(1, ...s.map(d => num(d[VENTAS_SERIE.k]))), 2);
+    // 52px de aire: deja pasar las etiquetas del eje X del panel de arriba.
+    const vBase = m.t + ih + 58;
+    const vh = HV - 40;
+    const vy = n => vBase + vh - (num(n)/vTop)*vh;
+
+    const lb = el('text',{ x:m.l, y:vBase-8, fill:css('--ink-3') });
+    lb.setAttribute('style','font-size:10.5px;letter-spacing:.06em;text-transform:uppercase');
+    lb.textContent = 'Ventas atribuidas a Rolo';
+    svg.appendChild(lb);
+
+    svg.appendChild(el('line',{ class:'gridline', x1:m.l, x2:W-m.r, y1:vBase+vh, y2:vBase+vh }));
+    const tMax = el('text',{ x:m.l-8, y:vBase+5, 'text-anchor':'end' });
+    tMax.textContent = vTop; svg.appendChild(tMax);
+
+    const bwv = Math.max(4, Math.min(26, iw/s.length - 10));
+    s.forEach((d,i) => {
+      const val = num(d[VENTAS_SERIE.k]);
+      if (val <= 0) return;
+      const h = (val/vTop)*vh;
+      const r = Math.min(3, h), x0 = cx(i)-bwv/2, y0 = vy(val), b = vBase+vh;
+      svg.appendChild(el('path',{ fill:VENTAS_SERIE.color,
+        d:`M${x0},${b} L${x0},${y0+r} Q${x0},${y0} ${x0+r},${y0} L${x0+bwv-r},${y0} Q${x0+bwv},${y0} ${x0+bwv},${y0+r} L${x0+bwv},${b} Z` }));
+    });
+  }
 
   const tip = tipFor(box);
   const cross = el('line',{ class:'cross', y1:m.t, y2:m.t+ih });
   svg.appendChild(cross);
   s.forEach((d,i) => {
-    const hz = el('rect',{ class:'hit', x:m.l+(iw/s.length)*i, y:m.t, width:iw/s.length, height:ih });
+    const hz = el('rect',{ class:'hit', x:m.l+(iw/s.length)*i, y:m.t, width:iw/s.length, height:H-m.t-8 });
     hz.addEventListener('mouseenter', () => {
       cross.setAttribute('x1',cx(i)); cross.setAttribute('x2',cx(i)); cross.style.opacity=.3;
       const sc = box.getBoundingClientRect().width / W;
@@ -236,7 +307,8 @@ function renderEvo() {
         tipRow(css('--s2'),'A la web', fmt(d.enviado_a_web))+
         tipRow(css('--ink-3'),'Conversaciones', fmt(d.total_conversaciones))+
         tipRow(null,'Tasa', dec1(d.tasa_resolucion_pct)+'%')+
-        tipRow(css('--s3'),'Leads', fmt(d.lead_calificado)),
+        tipRow(css('--s3'),'Leads', fmt(d.lead_calificado))+
+        tipRow(css('--s1'),'Ventas de Rolo', fmt(d.ventas_rolo_v1)),
         cx(i)*sc, y(Math.max(num(d.total_conversaciones), num(d.enviado_a_web)))*sc);
     });
     hz.addEventListener('mouseleave', () => { tip.hide(); cross.style.opacity=0; });
@@ -449,8 +521,9 @@ function renderTablaSem() {
       <td class="n"><span class="bar-mini">
         <span class="track"><span class="fill" style="width:${Math.min(100,t)}%;background:${css('--s2')}"></span></span>
         <b>${dec1(t)}%</b></span></td>
+      <td class="n" style="${num(d.ventas_rolo_v1)>0?`color:${css('--s1')};font-weight:700`:'color:var(--ink-3)'}">${fmt(d.ventas_rolo_v1)}</td>
       <td class="n">${fmt(d.lead_calificado)}</td>
-      <td class="n" style="${num(d.mala_experiencia)>0?`color:${css('--s1')};font-weight:700`:''}">${fmt(d.mala_experiencia)}</td>
+      <td class="n" style="${num(d.mala_experiencia)>0?`color:${css('--bad')};font-weight:700`:''}">${fmt(d.mala_experiencia)}</td>
       <td class="n">${dec2(d.score_promedio)}</td>
     </tr>`;
   }).join('');
@@ -677,7 +750,8 @@ function csv() {
   let cols, filas, nombre;
   if (VIEW === 'gestion') {
     cols = ['fecha','total_conversaciones','enviado_a_web','tasa_resolucion_pct',
-            'lead_calificado','consulta_comercial','inconclusa','mala_experiencia','score_promedio'];
+            'ventas_rolo_v1','lead_calificado','consulta_comercial','inconclusa',
+            'mala_experiencia','score_promedio'];
     filas = semanas(); nombre = 'driven_gestion';
   } else {
     cols = ['fecha','ventas_confirmadas','monto','ventas_atribuidas_rolo','monto_atribuido',
@@ -691,7 +765,11 @@ function csv() {
   }).join(','))).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([txt], { type:'text/csv;charset=utf-8' }));
-  a.download = `${nombre}_${MES==='todos'?'historico':MES}.csv`;
+  const suf = FILTRO.modo === 'todos' ? 'historico'
+            : FILTRO.modo === 'mes' ? FILTRO.mes
+            : FILTRO.modo === 'dia' ? FILTRO.dia
+            : `${FILTRO.desde||'ini'}_a_${FILTRO.hasta||'fin'}`;
+  a.download = `${nombre}_${suf}.csv`;
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
 }
 
@@ -713,12 +791,62 @@ function render() {
 }
 
 function init() {
-  // filtro de meses
-  const sel = document.getElementById('fMes');
-  sel.innerHTML = `<option value="todos">Todo el período</option>` +
-    (D.meses||[]).map(m => `<option value="${m}">${mLab(m).replace(/^./,c=>c.toUpperCase())}</option>`).join('');
-  sel.value = MES;
-  sel.onchange = () => { MES = sel.value; render(); };
+  // ---------- filtro de período ----------
+  const elModo = document.getElementById('fModo');
+  const elMes  = document.getElementById('fMes');
+  const elDia  = document.getElementById('fDia');
+  const elRango= document.getElementById('fRango');
+  const elDesde= document.getElementById('fDesde');
+  const elHasta= document.getElementById('fHasta');
+
+  // Límites reales de los datos: evita elegir fechas donde no hay nada.
+  const todasFechas = [
+    ...D.semanas_historico.map(x => x.fecha),
+    ...D.dias_ventas.map(x => x.fecha)
+  ].sort();
+  const MIN = todasFechas[0], MAX = todasFechas.at(-1);
+
+  elMes.innerHTML = (D.meses||[])
+    .map(m => `<option value="${m}">${mLab(m).replace(/^./,c=>c.toUpperCase())}</option>`).join('');
+  [elDia, elDesde, elHasta].forEach(i => { i.min = MIN; i.max = MAX; });
+  elMes.value  = (D.meses||[]).at(-1) || '';
+  elDia.value  = MAX;
+  elDesde.value = MIN; elHasta.value = MAX;
+
+  function aplicarFiltro() {
+    const modo = elModo.value;
+    // 'hidden' pierde contra el display del .btn: se fuerza por style.
+    const ver = (elm, on, disp) => {
+      elm.hidden = !on;
+      elm.style.display = on ? (disp || '') : 'none';
+    };
+    ver(elMes,   modo === 'mes');
+    ver(elDia,   modo === 'dia');
+    ver(elRango, modo === 'custom', 'inline-flex');
+
+    if (modo === 'todos') {
+      FILTRO = { modo, desde:null, hasta:null, mes:null, dia:null };
+    } else if (modo === 'mes') {
+      const m = elMes.value;
+      // Último día del mes, sin depender de la longitud: día 0 del siguiente.
+      const [y,mm] = m.split('-').map(Number);
+      const fin = new Date(y, mm, 0);
+      const p = n => String(n).padStart(2,'0');
+      FILTRO = { modo, mes:m, dia:null,
+                 desde:`${m}-01`,
+                 hasta:`${fin.getFullYear()}-${p(fin.getMonth()+1)}-${p(fin.getDate())}` };
+    } else if (modo === 'dia') {
+      const d = elDia.value;
+      FILTRO = { modo, dia:d, mes:null, desde:d, hasta:d };
+    } else {
+      let d = elDesde.value, h = elHasta.value;
+      if (d && h && d > h) { [d,h] = [h,d]; elDesde.value = d; elHasta.value = h; }
+      FILTRO = { modo, desde:d||null, hasta:h||null, mes:null, dia:null };
+    }
+    render();
+  }
+  [elModo, elMes, elDia, elDesde, elHasta].forEach(i => i.onchange = aplicarFiltro);
+  aplicarFiltro();
 
   document.querySelectorAll('.seg button[data-view]').forEach(b => b.onclick = () => {
     VIEW = b.dataset.view;
@@ -748,8 +876,6 @@ function init() {
   const g = document.getElementById('gen');
   if (g && D.generado) g.textContent = new Date(D.generado).toLocaleDateString('es-AR',
     { day:'2-digit', month:'2-digit', year:'numeric' });
-
-  render();
 }
 
 document.readyState === 'loading'

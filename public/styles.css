@@ -179,6 +179,18 @@ select.btn { appearance: none; padding-right: 30px;
   background-position: calc(100% - 15px) 51%, calc(100% - 10px) 51%;
   background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; }
 
+/* ---------------- filtro de período ---------------- */
+.filtro { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.filtro .rango { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.filtro .sep { color: var(--ink-3); font-size: 13px; }
+input[type="date"].btn {
+  font: 500 13px/1 Inter, sans-serif; color: var(--ink);
+  padding: 9px 11px; min-height: 40px; cursor: pointer;
+}
+input[type="date"].btn::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .6; }
+input[type="date"].btn::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+input[type="date"].btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
 /* ---------------- encabezado de sección ---------------- */
 .head { margin: var(--sp-5) 0 var(--sp-3); }
 .head h2 {

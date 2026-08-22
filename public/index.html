@@ -22,8 +22,29 @@
       </div>
     </div>
 
-    <label class="sr" for="fMes">Filtrar por mes</label>
-    <select class="btn" id="fMes" aria-label="Filtrar por mes"></select>
+    <div class="filtro">
+      <label class="sr" for="fModo">Tipo de período</label>
+      <select class="btn" id="fModo" aria-label="Tipo de período">
+        <option value="todos">Todo el período</option>
+        <option value="mes">Por mes</option>
+        <option value="dia">Por día</option>
+        <option value="custom">Personalizado</option>
+      </select>
+
+      <label class="sr" for="fMes">Mes</label>
+      <select class="btn" id="fMes" aria-label="Mes" hidden></select>
+
+      <label class="sr" for="fDia">Día</label>
+      <input class="btn" type="date" id="fDia" aria-label="Día" hidden>
+
+      <span id="fRango" class="rango" hidden>
+        <label class="sr" for="fDesde">Desde</label>
+        <input class="btn" type="date" id="fDesde" aria-label="Desde">
+        <span class="sep">—</span>
+        <label class="sr" for="fHasta">Hasta</label>
+        <input class="btn" type="date" id="fHasta" aria-label="Hasta">
+      </span>
+    </div>
 
     <div class="seg" role="group" aria-label="Vista">
       <button data-view="gestion" aria-pressed="true">Gestión</button>
@@ -96,6 +117,7 @@
           <th class="sortable n" data-k="total_conversaciones">Convs</th>
           <th class="sortable n" data-k="enviado_a_web">A la web</th>
           <th class="sortable n" data-k="tasa_resolucion_pct">Tasa</th>
+          <th class="sortable n" data-k="ventas_rolo_v1">Ventas</th>
           <th class="sortable n" data-k="lead_calificado">Leads</th>
           <th class="sortable n" data-k="mala_experiencia">Mala exp.</th>
           <th class="sortable n" data-k="score_promedio">Score</th>
