@@ -11,6 +11,11 @@ nunca ve credenciales: todas las consultas pasan por acá.
     GET /api/gestion?desde=&hasta=          informes diarios de Rolo
     GET /api/resumen?desde=&hasta=          KPIs + comparación con el período previo
     GET /api/versiones                      compara Rolo v1 vs v2 (normalizado por semana)
+    GET /api/canales?desde=&hasta=          desglose por canal (rolo/asesor/web directa)
+
+El tracking formal arranca el 2026-08-01 (INICIO_TRACKING): cuando TiendaNube
+empieza a cargar las ventas en GHL. Lo anterior son cargas manuales sueltas que
+se conservan como registro (computa = false) pero no entran en ningún KPI.
 
 Variables de entorno (todas del lado del servidor):
     SUPABASE_URL        https://xxxx.supabase.co
@@ -33,6 +38,10 @@ MIME = {".html":"text/html; charset=utf-8", ".css":"text/css; charset=utf-8",
         ".svg":"image/svg+xml", ".png":"image/png", ".ico":"image/x-icon"}
 
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# Fecha desde la que el conteo es real: TiendaNube carga las ventas en GHL.
+# Antes de esto solo hay cargas manuales sueltas, sin nº de orden.
+INICIO_TRACKING = os.environ.get("INICIO_TRACKING", "2026-08-01")
 
 
 class ErrorSupabase(Exception):
@@ -93,9 +102,12 @@ def ventas_serie(desde, hasta, grano):
         m = str(f["fecha"])[:7]
         a = por.setdefault(m, {"fecha": m + "-01", "mes": m, "ventas_confirmadas": 0,
                                "monto_total": 0, "ventas_atribuidas": 0, "monto_atribuido": 0,
+                               "ventas_asesor": 0, "monto_asesor": 0,
+                               "ventas_web_directa": 0, "monto_web_directa": 0,
                                "ventas_no_atribuibles": 0, "monto_no_atribuible": 0})
-        for k in ("ventas_confirmadas","monto_total","ventas_atribuidas",
-                  "monto_atribuido","ventas_no_atribuibles","monto_no_atribuible"):
+        for k in ("ventas_confirmadas","monto_total","ventas_atribuidas","monto_atribuido",
+                  "ventas_asesor","monto_asesor","ventas_web_directa","monto_web_directa",
+                  "ventas_no_atribuibles","monto_no_atribuible"):
             a[k] += int(f.get(k) or 0)
     salida = sorted(por.values(), key=lambda x: x["mes"])
     for a in salida:
@@ -114,15 +126,41 @@ def periodo_previo(desde, hasta):
 
 
 def totales_ventas(desde, hasta):
+    """Totales del período, desglosados por canal.
+
+    Los tres canales son EXCLUYENTES y suman el total: cada venta cae en
+    uno y solo uno. Por eso los porcentajes cierran en 100 y el panel puede
+    mostrarlos como partes de una misma torta sin trampa.
+
+        rolo        Rolo asesoró antes de la compra (ventana de 7 días)
+        asesor      la cerró una persona del equipo (no vino de TiendaNube)
+        web_directa el cliente compró solo en la tienda
+
+    La vista rolo_ventas_por_dia ya filtra computa = false, así que lo
+    anterior al inicio del tracking nunca llega hasta acá.
+    """
     filas = ventas_serie(desde, hasta, "dia")
-    t = {"ventas": 0, "monto": 0, "ventas_rolo": 0, "monto_rolo": 0, "dias": len(filas)}
+    t = {"ventas": 0, "monto": 0, "ventas_rolo": 0, "monto_rolo": 0,
+         "ventas_asesor": 0, "monto_asesor": 0,
+         "ventas_web": 0, "monto_web": 0, "dias": len(filas)}
     for f in filas:
-        t["ventas"]      += int(f.get("ventas_confirmadas") or 0)
-        t["monto"]       += int(f.get("monto_total") or 0)
-        t["ventas_rolo"] += int(f.get("ventas_atribuidas") or 0)
-        t["monto_rolo"]  += int(f.get("monto_atribuido") or 0)
+        t["ventas"]        += int(f.get("ventas_confirmadas") or 0)
+        t["monto"]         += int(f.get("monto_total") or 0)
+        t["ventas_rolo"]   += int(f.get("ventas_atribuidas") or 0)
+        t["monto_rolo"]    += int(f.get("monto_atribuido") or 0)
+        t["ventas_asesor"] += int(f.get("ventas_asesor") or 0)
+        t["monto_asesor"]  += int(f.get("monto_asesor") or 0)
+        t["ventas_web"]    += int(f.get("ventas_web_directa") or 0)
+        t["monto_web"]     += int(f.get("monto_web_directa") or 0)
     t["ticket"] = round(t["monto"]/t["ventas"]) if t["ventas"] else 0
-    t["pct_atribucion"] = round(t["monto_rolo"]/t["monto"]*100, 1) if t["monto"] else 0.0
+    pct = lambda x: round(x / t["monto"] * 100, 1) if t["monto"] else 0.0
+    t["pct_atribucion"] = pct(t["monto_rolo"])
+    t["pct_asesor"]     = pct(t["monto_asesor"])
+    t["pct_web"]        = pct(t["monto_web"])
+    # Ticket por canal: responde "¿Rolo trae compras más grandes?"
+    t["ticket_rolo"]   = round(t["monto_rolo"]/t["ventas_rolo"]) if t["ventas_rolo"] else 0
+    t["ticket_asesor"] = round(t["monto_asesor"]/t["ventas_asesor"]) if t["ventas_asesor"] else 0
+    t["ticket_web"]    = round(t["monto_web"]/t["ventas_web"]) if t["ventas_web"] else 0
     return t
 
 
@@ -286,16 +324,48 @@ class Handler(BaseHTTPRequestHandler):
                                        "serie": ventas_serie(desde, hasta, grano)})
 
             if ruta == "/api/ventas/detalle":
-                params = [("select", "fecha,cliente,nombre,monto,atribuida_rolo,motivo,nro_orden,contact_id"),
+                params = [("select", "fecha,cliente,nombre,monto,atribuida_rolo,motivo,"
+                                     "nro_orden,contact_id,canal,computa"),
                           ("order", "fecha.desc,monto.desc"),
                           ("limit", (qs.get("limit") or ["500"])[0])]
                 params += filtros_fecha(desde, hasta)
+                # La tabla del panel muestra la facturación del período: lo que
+                # no computa se consulta aparte, en /api/canales.
+                params.append(("computa", "is.true"))
                 return self.responder({"ventas": supabase("rolo_ventas", params)})
 
             if ruta == "/api/gestion":
                 params = [("select", "*"), ("order", "fecha.asc")]
                 params += filtros_fecha(desde, hasta)
                 return self.responder({"informes": supabase("rolo_informes_diarios", params)})
+
+            if ruta == "/api/canales":
+                # Desglose por canal + el registro que quedó fuera del período.
+                # Van juntos a propósito: el panel muestra el corte y lo previo
+                # en el mismo lugar, para que nadie los sume por accidente.
+                t = totales_ventas(desde, hasta)
+                canales = [
+                    {"canal": "rolo", "etiqueta": "Rolo (agente IA)",
+                     "ventas": t["ventas_rolo"], "monto": t["monto_rolo"],
+                     "pct": t["pct_atribucion"], "ticket": t["ticket_rolo"]},
+                    {"canal": "asesor", "etiqueta": "Asesores",
+                     "ventas": t["ventas_asesor"], "monto": t["monto_asesor"],
+                     "pct": t["pct_asesor"], "ticket": t["ticket_asesor"]},
+                    {"canal": "web_directa", "etiqueta": "Web directa",
+                     "ventas": t["ventas_web"], "monto": t["monto_web"],
+                     "pct": t["pct_web"], "ticket": t["ticket_web"]},
+                ]
+                try:
+                    fuera = (supabase("rolo_ventas_fuera_de_periodo", [("select", "*")]) or [None])[0]
+                except ErrorSupabase:
+                    fuera = None
+                return self.responder({
+                    "desde": desde, "hasta": hasta,
+                    "inicio_tracking": INICIO_TRACKING,
+                    "total": {"ventas": t["ventas"], "monto": t["monto"], "ticket": t["ticket"]},
+                    "canales": canales,
+                    "fuera_de_periodo": fuera,
+                })
 
             if ruta == "/api/versiones":
                 return self.responder(comparar_versiones())
@@ -311,9 +381,15 @@ class Handler(BaseHTTPRequestHandler):
                     previo = {"desde": pd, "hasta": ph, "ventas": pv, "gestion": pg}
                 # Rango real disponible, para que el front arme los selectores.
                 lim = supabase("rolo_ventas_por_dia", [("select", "fecha"), ("order", "fecha.asc")])
+                try:
+                    fuera = (supabase("rolo_ventas_fuera_de_periodo", [("select", "*")]) or [None])[0]
+                except ErrorSupabase:
+                    fuera = None
                 return self.responder({
                     "desde": desde, "hasta": hasta,
                     "ventas": tv, "gestion": tg, "previo": previo,
+                    "inicio_tracking": INICIO_TRACKING,
+                    "fuera_de_periodo": fuera,
                     "cobertura": {"desde": lim[0]["fecha"] if lim else None,
                                   "hasta": lim[-1]["fecha"] if lim else None},
                 })

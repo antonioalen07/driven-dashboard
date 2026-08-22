@@ -23,10 +23,30 @@ precargado — así el mismo archivo sirve para revisar el diseño sin infraestr
 - Detalle por semana, ordenable
 
 **Vista Ventas** — la plata
-- Facturación, ticket promedio, atribución a Rolo
-- Facturación por día (apilada: atribuido vs. sin atribuir)
-- Dona de atribución
-- Detalle de cada venta con su estado
+- Facturación total y el desglose por los **tres canales**: Rolo, asesores, web directa
+- Ticket promedio (global y por canal)
+- Facturación por día
+- Dona de atribución con los tres canales
+- Detalle de cada venta con su canal
+
+### Los tres canales
+
+Cada venta cae en **uno y solo uno**, y los tres suman el total:
+
+| Canal | Qué es | Cómo se detecta |
+|---|---|---|
+| **Rolo** | el agente asesoró antes de la compra | cruce con las conversaciones, ventana de 7 días |
+| **Asesores** | la cerró una persona del equipo | ganada en el CRM sin origen TiendaNube |
+| **Web directa** | compra autónoma en la tienda | `Venta Web #<orden>` o tag `compro-en-web` |
+
+Antes había solo dos ("Rolo" y "sin atribuir"), lo que metía en la misma bolsa una
+venta trabajada por un asesor y una compra que se hizo sola.
+
+### El corte del 1/8/2026
+
+El conteo real arranca cuando TiendaNube empezó a cargar cada venta en GHL. Las 7
+ventas anteriores (mar–may 2026) son cargas manuales sueltas, sin nº de orden: se
+conservan como registro (`computa = false`) pero **no entran en ningún KPI**.
 
 **Filtros de período** en toda la aplicación:
 - **Todo el período** — el histórico completo
@@ -79,6 +99,7 @@ conserve el historial ni de recalcular la atribución cada vez.
 | `GET /api/ventas/detalle?desde=&hasta=` | Cada venta del rango |
 | `GET /api/gestion?desde=&hasta=` | Informes diarios |
 | `GET /api/resumen?desde=&hasta=` | KPIs + comparación con el período previo |
+| `GET /api/canales?desde=&hasta=` | Desglose por canal + registro fuera de período |
 | `GET /api/versiones` | Compara Rolo v1 vs v2, normalizado por semana |
 
 > **Todas las ventas se registran, atribuidas o no.** El flujo guarda en
@@ -102,6 +123,7 @@ En el SQL Editor, ejecutar en orden:
 1. `tracking-diario/02_tabla_informes.sql` — resumen diario (quizá ya lo hiciste)
 2. `tracking-diario/04_tabla_ventas.sql` — histórico de ventas + vista
 3. `tracking-diario/05_historico_v1.sql` — columnas para separar el histórico v1
+4. `tracking-diario/06_canales_y_corte.sql` — canal (rolo/asesor/web) + corte del 1/8
 
 ### 2. Cargar los datos
 ```bash

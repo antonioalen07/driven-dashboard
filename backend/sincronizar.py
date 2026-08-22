@@ -21,6 +21,10 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 GHL_TOKEN    = os.environ.get("GHL_TOKEN", "").strip()
+
+# Desde acá el conteo es real: TiendaNube carga las ventas en GHL.
+# Lo anterior son cargas manuales sueltas: se conservan, no computan.
+INICIO_TRACKING = os.environ.get("INICIO_TRACKING", "2026-08-01")
 GHL_LOCATION = os.environ.get("GHL_LOCATION_ID", "BMHsoyIJ3WBb6yfmh2LY")
 GHL_PIPELINE = os.environ.get("GHL_PIPELINE_ID", "NbShXQHetl9uBaPOYt3N")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -129,9 +133,66 @@ def mapear(op):
                         or "compro-en-web" in [t.lower() for t in (contacto.get("tags") or [])],
         "origen": "ghl",
         "actualizado_en": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-        # atribuida_rolo / motivo NO se envían: los decide el flujo de tracking.
-        # Si se mandaran, un resync pisaría la atribución con el default (false).
+        # atribuida_rolo / motivo / canal NO se envían: los decide el flujo de
+        # tracking. Si se mandaran, un resync pisaría la atribución con el
+        # default y Rolo perdería el crédito de ventas que sí generó.
+        # El canal de las filas NUEVAS lo pone completar_nuevas(), más abajo.
     }
+
+
+def clasificar_canal(fila):
+    """Canal de una venta que todavía no pasó por el flujo de atribución.
+
+    Solo distingue lo que se puede saber sin mirar conversaciones:
+
+        web_directa  vino de TiendaNube (nº de orden o tag 'compro-en-web')
+        asesor       ganada en GHL sin rastro de TiendaNube -> la cargó alguien
+
+    Nunca devuelve 'rolo': esa decisión necesita el cruce con chat_message
+    y la toma el flujo de n8n. Acá el default seguro es no dar crédito.
+    """
+    if fila.get("es_venta_web") or fila.get("nro_orden"):
+        return "web_directa"
+    return "asesor"
+
+
+def completar_nuevas(filas):
+    """Agrega canal/computa SOLO a las ventas que no están en la base.
+
+    Por qué hace falta: el UPSERT usa merge-duplicates, así que cualquier
+    campo enviado pisa el valor existente. Si mandáramos 'canal' en todas
+    las filas, un resync borraría los canales 'rolo' que decidió n8n.
+
+    Se consulta qué ids ya existen y se completan únicamente los nuevos.
+    """
+    if not filas:
+        return filas
+    existentes = set()
+    ids = [f["oportunidad_id"] for f in filas]
+    # De a 100 para no armar una URL gigante.
+    for i in range(0, len(ids), 100):
+        lote = ids[i:i+100]
+        lista = ",".join('"%s"' % x.replace('"', '') for x in lote)
+        try:
+            for r in supabase_get("rolo_ventas",
+                                  {"select": "oportunidad_id",
+                                   "oportunidad_id": f"in.({lista})"}) or []:
+                existentes.add(r["oportunidad_id"])
+        except Exception as e:
+            # Ante la duda, no tocar el canal de nadie.
+            print(f"  aviso: no se pudo verificar duplicados ({e}); no se asigna canal")
+            return filas
+
+    nuevas = 0
+    for f in filas:
+        if f["oportunidad_id"] in existentes:
+            continue
+        f["canal"] = clasificar_canal(f)
+        f["computa"] = f["fecha"] >= INICIO_TRACKING and f["monto"] > 0
+        nuevas += 1
+    if nuevas:
+        print(f"  {nuevas} ventas nuevas clasificadas por canal")
+    return filas
 
 
 def ticket_referencia():
@@ -246,6 +307,7 @@ def main():
         filas = [f for f in filas if f["fecha"] >= corte]
         print(f"  (últimos 30 días; usá --todo para el histórico completo)")
 
+    filas = completar_nuevas(filas)
     n = upsert("rolo_ventas", filas, "oportunidad_id")
     monto = sum(f["monto"] for f in filas)
     print(f"  {n} ventas sincronizadas | ${monto:,.0f}")

@@ -61,22 +61,42 @@ async function cargarDeApi() {
     };
   });
 
+  // Los tres canales son EXCLUYENTES: rolo + asesor + web_directa = total.
+  // Por eso el panel puede mostrarlos como partes de una misma torta.
   const dias = serie.map(v => ({
     fecha: v.fecha,
     ventas_confirmadas:     +v.ventas_confirmadas || 0,
     monto:                  +v.monto_total || 0,
     ventas_atribuidas_rolo: +v.ventas_atribuidas || 0,
     monto_atribuido:        +v.monto_atribuido || 0,
+    ventas_asesor:          +v.ventas_asesor || 0,
+    monto_asesor:           +v.monto_asesor || 0,
+    ventas_web_directa:     +v.ventas_web_directa || 0,
+    monto_web_directa:      +v.monto_web_directa || 0,
     ventas_no_atribuibles:  +v.ventas_no_atribuibles || 0,
     monto_no_atribuible:    +v.monto_no_atribuible || 0,
     detalle: [],
   }));
+
+  // Registro previo al inicio del tracking: existe, se muestra como nota,
+  // pero no entra en ningún KPI. Si el endpoint no está, el panel sigue.
+  let fueraDePeriodo = null, inicioTracking = null;
+  try {
+    const rc = await fetch('/api/canales');
+    if (rc.ok) {
+      const c = await rc.json();
+      fueraDePeriodo = c.fuera_de_periodo || null;
+      inicioTracking = c.inicio_tracking || null;
+    }
+  } catch (e) { /* opcional: el resto del panel no depende de esto */ }
 
   const meses = [...new Set([...semanas, ...dias].map(x => String(x.fecha).slice(0,7)))].sort();
   return {
     generado: new Date().toISOString(),
     meses, semanas_historico: semanas, dias_ventas: dias,
     tasas_corregidas: [],
+    fuera_de_periodo: fueraDePeriodo,
+    inicio_tracking: inicioTracking,
     rolo_operativo: dias.some(d => d.ventas_atribuidas_rolo > 0),
   };
 }
@@ -258,19 +278,30 @@ function renderKpisVentas() {
   const ticket = n ? monto/n : 0;
   const pctAtr = monto ? montoAtr/monto*100 : 0;
 
+  // Los tres canales: cada venta cae en uno y solo uno.
+  const ase = sum('ventas_asesor'), montoAse = sum('monto_asesor');
+  // Si el backend todavía no expone los canales, todo lo no-Rolo cae
+  // en web directa: es el default conservador, no inventa asesores.
+  const hayCanales = v.some(d => d.ventas_asesor != null || d.ventas_web_directa != null);
+  const web = hayCanales ? sum('ventas_web_directa') : (n - atr);
+  const montoWeb = hayCanales ? sum('monto_web_directa') : (monto - montoAtr);
+  const pct = x => monto ? x/monto*100 : 0;
+
   box.innerHTML = [
-    kpi({lab:'Facturación', val:money(monto), accent:css('--s4'),
-         sub:`${fmt(n)} venta${n!==1?'s':''} confirmada${n!==1?'s':''}`}),
-    kpi({lab:'Ticket promedio', val:money(ticket), sub:'por venta'}),
-    kpi({lab:'Atribuido a Rolo', val:money(montoAtr), accent:css('--s1'),
-         sub:`${dec1(pctAtr)}% de la facturación`,
+    kpi({lab:'Facturación total', val:money(monto), accent:css('--s4'),
+         sub:`${fmt(n)} venta${n!==1?'s':''} de la tienda`,
+         tip:'Todas las ventas ganadas en el CRM en el período. Es la suma de los tres canales.'}),
+    kpi({lab:'Ventas de Rolo', val:money(montoAtr), accent:css('--s1'),
+         sub:`${fmt(atr)} venta${atr!==1?'s':''} · ${dec1(pct(montoAtr))}% del total`,
          pending: atr === 0,
-         tip:'Ventas donde Rolo asesoró antes de la compra. Se confirma cruzando el CRM con las conversaciones.'}),
-    kpi({lab:'Ventas de Rolo', val:fmt(atr), accent:css('--s1'),
-         sub: atr === 0 ? 'Rolo aún no está operativo' : 'asesoradas antes de comprar',
-         pending: atr === 0}),
-    kpi({lab:'Sin atribuir', val:fmt(n - atr), accent:css('--s5'),
-         sub:'compras directas a la web'}),
+         tip:'Rolo asesoró (mandó link o buscó productos) antes de la compra, dentro de la ventana de 7 días.'}),
+    kpi({lab:'Ventas de asesores', val:money(montoAse), accent:css('--s3'),
+         sub:`${fmt(ase)} venta${ase!==1?'s':''} · ${dec1(pct(montoAse))}% del total`,
+         tip:'Cerradas por una persona del equipo: ganadas en el CRM sin origen TiendaNube.'}),
+    kpi({lab:'Web directa', val:money(montoWeb), accent:css('--s5'),
+         sub:`${fmt(web)} venta${web!==1?'s':''} · ${dec1(pct(montoWeb))}% del total`,
+         tip:'El cliente compró solo en la tienda, sin que Rolo ni un asesor intervinieran.'}),
+    kpi({lab:'Ticket promedio', val:money(ticket), sub:'por venta del período'}),
     kpi({lab:'Días con ventas', val:fmt(v.length), sub:'en el período'}),
   ].join('');
 
@@ -718,12 +749,18 @@ function renderTorta() {
   box.innerHTML = ''; legBox.innerHTML = '';
   if (!v.length) { box.innerHTML = '<p class="empty">Sin datos.</p>'; return; }
 
-  const atr = v.reduce((a,d) => a + num(d.monto_atribuido), 0);
-  const tot = v.reduce((a,d) => a + num(d.monto), 0);
-  const resto = Math.max(0, tot - atr);
+  const S = k => v.reduce((a,d) => a + num(d[k]), 0);
+  const atr = S('monto_atribuido');
+  const tot = S('monto');
+  const hayCanales = v.some(d => d.monto_asesor != null || d.monto_web_directa != null);
+  const ase = hayCanales ? S('monto_asesor') : 0;
+  // Lo que no es Rolo ni asesor es compra autónoma. Se calcula por resta
+  // para que los tres canales siempre cierren exactamente en el total.
+  const web = Math.max(0, tot - atr - ase);
   const partes = [
-    { lab:'Atribuido a Rolo', v:atr,   c:css('--s1') },
-    { lab:'Sin atribuir',     v:resto, c:css('--s5') },
+    { lab:'Rolo (agente IA)', v:atr, c:css('--s1') },
+    { lab:'Asesores',         v:ase, c:css('--s3') },
+    { lab:'Web directa',      v:web, c:css('--s5') },
   ].filter(p => p.v > 0);
   if (!partes.length) { box.innerHTML = '<p class="empty">Sin facturación.</p>'; return; }
 
@@ -738,10 +775,16 @@ function renderTorta() {
           Cuando entre en operación, acá vas a ver qué porcentaje de la facturación generó el agente.
         </p>
       </div>`;
-    legBox.innerHTML = `<div style="display:grid;gap:8px;margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:1px solid var(--line-soft)">
-      <div style="display:flex;align-items:center;gap:9px;font-size:13px">
-        <span style="width:11px;height:11px;border-radius:3px;background:${css('--s5')};flex:none"></span>
-        <span style="color:var(--ink-2)">Facturación total del período</span>
+    // Aunque Rolo esté en 0, el resto SÍ se desglosa: asesores y web directa
+    // son dos cosas distintas y el cliente necesita verlas separadas.
+    legBox.innerHTML = `<div style="display:grid;gap:8px;margin-top:var(--sp-4);padding-top:var(--sp-3);border-top:1px solid var(--line-soft)">` +
+      partes.map(p => `<div style="display:flex;align-items:center;gap:9px;font-size:13px">
+        <span style="width:11px;height:11px;border-radius:3px;background:${p.c};flex:none"></span>
+        <span style="color:var(--ink-2)">${esc(p.lab)}</span>
+        <b class="num" style="margin-left:auto">${moneyFull(p.v)}</b>
+      </div>`).join('') +
+      `<div style="display:flex;align-items:center;gap:9px;font-size:13px;padding-top:8px;border-top:1px solid var(--line-soft)">
+        <span style="color:var(--ink-2)">Facturación total</span>
         <b class="num" style="margin-left:auto">${moneyFull(tot)}</b>
       </div></div>`;
     return;
@@ -813,7 +856,11 @@ async function cargarDetalleVentas() {
       if (!porDia.has(f)) porDia.set(f, []);
       porDia.get(f).push({ cliente: x.cliente || '—', nombre: x.nombre || '—',
                            monto: +x.monto || 0, contact_id: x.contact_id,
-                           atribuida: x.atribuida_rolo === true, motivo: x.motivo });
+                           atribuida: x.atribuida_rolo === true, motivo: x.motivo,
+                           // Si el backend aún no manda canal, se deduce del
+                           // nº de orden: con orden vino de la tienda.
+                           canal: x.canal || (x.atribuida_rolo === true ? 'rolo'
+                                   : (x.nro_orden ? 'web_directa' : 'asesor')) });
     });
     D.dias_ventas.forEach(d => { d.detalle = porDia.get(d.fecha) || []; });
     renderTablaVta();
@@ -827,16 +874,23 @@ function renderTablaVta() {
   filas.sort((a,b) => day(b.fecha) - day(a.fecha) || b.monto - a.monto);
   if (!filas.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">Sin ventas en el período.</td></tr>'; return; }
 
+  // Cada venta muestra su canal, no un binario. "Sin atribuir" mezclaba
+  // dos cosas distintas: una venta que cerró un asesor y una compra sola.
+  const CANAL = {
+    rolo:        { lab:'Rolo',        c:'--s1' },
+    asesor:      { lab:'Asesor',      c:'--s3' },
+    web_directa: { lab:'Web directa', c:'--s5' },
+  };
   tb.innerHTML = filas.slice(0, 60).map(f => {
-    const atribuida = !!f.atribuida;
-    const c = atribuida ? css('--s1') : css('--s5');
+    const k = CANAL[f.canal] || CANAL.web_directa;
+    const c = css(k.c);
     return `<tr>
       <td style="white-space:nowrap">${dLab(f.fecha)}</td>
       <td><b>${esc(f.cliente || '—')}</b></td>
       <td style="color:var(--ink-2)">${esc(f.nombre || '—')}</td>
       <td class="n" style="font-weight:700">${moneyFull(f.monto)}</td>
-      <td><span class="chip" style="background:color-mix(in srgb,${c} 13%,transparent);color:${c}">
-        <span class="dot" style="background:${c}"></span>${atribuida ? 'Rolo' : 'Sin atribuir'}</span></td>
+      <td><span class="chip" title="${esc(f.motivo || '')}" style="background:color-mix(in srgb,${c} 13%,transparent);color:${c}">
+        <span class="dot" style="background:${c}"></span>${k.lab}</span></td>
     </tr>`;
   }).join('');
 }
@@ -849,11 +903,22 @@ function renderAvisos() {
   const bits = [];
   const hayEstimadas = (D.semanas_historico || []).some(x => x.es_estimado);
 
+  const ini = D.inicio_tracking || '2026-08-01';
+  const iniLab = dLong(ini);
+
+  // El corte va primero: define qué significan todos los números de abajo.
+  bits.push(`El conteo de ventas arranca el <b>${iniLab}</b>, cuando la tienda empezó a cargar cada venta en el CRM. Desde ahí cada venta se clasifica en uno de tres canales: <b>Rolo</b>, <b>asesores</b> o <b>web directa</b>.`);
+
+  const fp = D.fuera_de_periodo;
+  if (fp && +fp.ventas > 0) {
+    bits.push(`Hay <b>${fmt(fp.ventas)} venta${+fp.ventas!==1?'s':''}</b> anterior${+fp.ventas!==1?'es':''} al inicio del tracking (${moneyFull(fp.monto)}, ${dLab(fp.desde)} — ${dLab(fp.hasta)}): cargas manuales sueltas en el CRM, sin nº de orden. Se conservan como registro pero <b>no computan</b> en la facturación.`);
+  }
+
   if (D.rolo_operativo === false) {
     bits.push(`<b>Rolo todavía no está operativo.</b> Las ventas que ves son reales y vienen del CRM, pero ninguna está atribuida al agente aún. Cuando Rolo entre en operación, el panel empieza a separar qué ventas generó él.`);
   }
   if (hayEstimadas) {
-    bits.push(`El período <b>marzo–junio 2026</b> corresponde al <b>Rolo v1</b>: sus ventas son un conteo estimado por IA sobre las conversaciones, sin monto ni cliente reales. Se muestran aparte y <b>nunca se suman</b> a la facturación del CRM.`);
+    bits.push(`El período <b>marzo–junio 2026</b> corresponde al <b>Rolo v1</b> — una versión <b>deprecada</b> del agente. Sus ventas son un conteo estimado por IA sobre las conversaciones, sin monto ni cliente reales. Se conservan solo para comparar contra el v2 y <b>nunca se suman</b> a la facturación.`);
   }
   if ((D.tasas_corregidas||[]).length) {
     const n = D.tasas_corregidas.length;
@@ -876,8 +941,10 @@ function csv() {
             'mala_experiencia','score_promedio'];
     filas = semanas(); nombre = 'driven_gestion';
   } else {
-    cols = ['fecha','ventas_confirmadas','monto','ventas_atribuidas_rolo','monto_atribuido',
-            'ventas_no_atribuibles','monto_no_atribuible'];
+    cols = ['fecha','ventas_confirmadas','monto',
+            'ventas_atribuidas_rolo','monto_atribuido',
+            'ventas_asesor','monto_asesor',
+            'ventas_web_directa','monto_web_directa'];
     filas = dias(); nombre = 'driven_ventas';
   }
   if (!filas.length) return;
