@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""
+Backend del panel de Driven.
+
+Sirve los estáticos y expone una API que lee de Supabase. El navegador
+nunca ve credenciales: todas las consultas pasan por acá.
+
+    GET /api/salud                          estado de las conexiones
+    GET /api/ventas?desde=&hasta=&grano=    serie de ventas (dia|mes)
+    GET /api/ventas/detalle?desde=&hasta=   cada venta del rango
+    GET /api/gestion?desde=&hasta=          informes diarios de Rolo
+    GET /api/resumen?desde=&hasta=          KPIs + comparación con el período previo
+
+Variables de entorno (todas del lado del servidor):
+    SUPABASE_URL        https://xxxx.supabase.co
+    SUPABASE_KEY        service_role key  (NUNCA se envía al navegador)
+    PORT                8000 por defecto
+
+Sin dependencias externas: solo la stdlib de Python.
+"""
+import os, json, urllib.request, urllib.parse, urllib.error, datetime, re
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+PORT         = int(os.environ.get("PORT", "8000"))
+PUBLIC       = Path(__file__).resolve().parent.parent / "public"
+
+MIME = {".html":"text/html; charset=utf-8", ".css":"text/css; charset=utf-8",
+        ".js":"application/javascript; charset=utf-8", ".json":"application/json; charset=utf-8",
+        ".svg":"image/svg+xml", ".png":"image/png", ".ico":"image/x-icon"}
+
+ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class ErrorSupabase(Exception):
+    pass
+
+
+def supabase(tabla, params=None, timeout=25):
+    """GET contra PostgREST. Devuelve la lista de filas."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise ErrorSupabase("Faltan SUPABASE_URL o SUPABASE_KEY")
+    url = f"{SUPABASE_URL}/rest/v1/{tabla}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params, safe="().,*")
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPABASE_KEY,
+        "Authorization": "Bearer " + SUPABASE_KEY,
+        "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        detalle = e.read().decode()[:300]
+        raise ErrorSupabase(f"Supabase {e.code}: {detalle}")
+    except urllib.error.URLError as e:
+        raise ErrorSupabase(f"No se pudo conectar a Supabase: {e.reason}")
+
+
+def rango(qs):
+    """Lee desde/hasta del querystring. Sin límites = todo el histórico."""
+    d = (qs.get("desde") or [""])[0].strip()
+    h = (qs.get("hasta") or [""])[0].strip()
+    if d and not ISO.match(d): d = ""
+    if h and not ISO.match(h): h = ""
+    if d and h and d > h: d, h = h, d
+    return d or None, h or None
+
+
+def filtros_fecha(desde, hasta, campo="fecha"):
+    f = []
+    if desde: f.append((campo, f"gte.{desde}"))
+    if hasta: f.append((campo, f"lte.{hasta}"))
+    return f
+
+
+def ventas_serie(desde, hasta, grano):
+    """Serie de ventas agregada por día o por mes."""
+    params = [("select", "*"), ("order", "fecha.asc")]
+    params += filtros_fecha(desde, hasta)
+    filas = supabase("rolo_ventas_por_dia", params)
+
+    if grano != "mes":
+        return filas
+
+    # Agregado mensual: se hace acá para no depender de otra vista.
+    por = {}
+    for f in filas:
+        m = str(f["fecha"])[:7]
+        a = por.setdefault(m, {"fecha": m + "-01", "mes": m, "ventas_confirmadas": 0,
+                               "monto_total": 0, "ventas_atribuidas": 0, "monto_atribuido": 0,
+                               "ventas_no_atribuibles": 0, "monto_no_atribuible": 0})
+        for k in ("ventas_confirmadas","monto_total","ventas_atribuidas",
+                  "monto_atribuido","ventas_no_atribuibles","monto_no_atribuible"):
+            a[k] += int(f.get(k) or 0)
+    salida = sorted(por.values(), key=lambda x: x["mes"])
+    for a in salida:
+        a["ticket_promedio"] = round(a["monto_total"]/a["ventas_confirmadas"]) if a["ventas_confirmadas"] else 0
+    return salida
+
+
+def periodo_previo(desde, hasta):
+    """Rango inmediatamente anterior, del mismo largo, para comparar."""
+    if not desde or not hasta:
+        return None, None
+    d0 = datetime.date.fromisoformat(desde)
+    h0 = datetime.date.fromisoformat(hasta)
+    dias = (h0 - d0).days + 1
+    return (d0 - datetime.timedelta(days=dias)).isoformat(), (d0 - datetime.timedelta(days=1)).isoformat()
+
+
+def totales_ventas(desde, hasta):
+    filas = ventas_serie(desde, hasta, "dia")
+    t = {"ventas": 0, "monto": 0, "ventas_rolo": 0, "monto_rolo": 0, "dias": len(filas)}
+    for f in filas:
+        t["ventas"]      += int(f.get("ventas_confirmadas") or 0)
+        t["monto"]       += int(f.get("monto_total") or 0)
+        t["ventas_rolo"] += int(f.get("ventas_atribuidas") or 0)
+        t["monto_rolo"]  += int(f.get("monto_atribuido") or 0)
+    t["ticket"] = round(t["monto"]/t["ventas"]) if t["ventas"] else 0
+    t["pct_atribucion"] = round(t["monto_rolo"]/t["monto"]*100, 1) if t["monto"] else 0.0
+    return t
+
+
+def totales_gestion(desde, hasta):
+    params = [("select", "*"), ("order", "fecha.asc")]
+    params += filtros_fecha(desde, hasta)
+    filas = supabase("rolo_informes_diarios", params)
+    t = {"conversaciones": 0, "enviado_a_web": 0, "leads": 0, "b2b": 0,
+         "mala_experiencia": 0, "dias": len(filas), "score": 0.0}
+    scores = []
+    for f in filas:
+        t["conversaciones"]   += int(f.get("total_conversaciones") or 0)
+        t["enviado_a_web"]    += int(f.get("enviado_a_web") or 0)
+        t["leads"]            += int(f.get("lead_calificado") or 0)
+        t["b2b"]              += int(f.get("lead_b2b") or 0)
+        t["mala_experiencia"] += int(f.get("mala_experiencia") or 0)
+        s = float(f.get("score_promedio") or 0)
+        if s: scores.append(s)
+    t["score"] = round(sum(scores)/len(scores), 2) if scores else 0.0
+    t["tasa"] = round(t["enviado_a_web"]/t["conversaciones"]*100, 1) if t["conversaciones"] else 0.0
+    return t, filas
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "DrivenPanel"
+
+    def log_message(self, fmt, *args):
+        print(f"{self.address_string()} {fmt % args}", flush=True)
+
+    # ---------- helpers ----------
+    def responder(self, obj, code=200):
+        cuerpo = json.dumps(obj, ensure_ascii=False, default=str).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(cuerpo)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(cuerpo)
+
+    def estatico(self, ruta):
+        if ruta in ("", "/"):
+            ruta = "/index.html"
+        destino = (PUBLIC / ruta.lstrip("/")).resolve()
+        # Nunca servir fuera de public/
+        if not str(destino).startswith(str(PUBLIC.resolve())) or not destino.is_file():
+            self.send_error(404, "No encontrado")
+            return
+        datos = destino.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", MIME.get(destino.suffix, "application/octet-stream"))
+        self.send_header("Content-Length", str(len(datos)))
+        self.send_header("Cache-Control",
+                         "no-store" if destino.suffix in (".html", ".json") else "max-age=3600")
+        self.end_headers()
+        self.wfile.write(datos)
+
+    # ---------- rutas ----------
+    def do_GET(self):
+        u = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(u.query)
+        ruta = u.path
+
+        if not ruta.startswith("/api/"):
+            return self.estatico(ruta)
+
+        try:
+            desde, hasta = rango(qs)
+
+            if ruta == "/api/salud":
+                info = {"ok": True, "supabase_configurado": bool(SUPABASE_URL and SUPABASE_KEY)}
+                try:
+                    supabase("rolo_informes_diarios", [("select", "fecha"), ("limit", "1")])
+                    info["informes"] = "ok"
+                except ErrorSupabase as e:
+                    info["informes"] = str(e); info["ok"] = False
+                try:
+                    supabase("rolo_ventas", [("select", "oportunidad_id"), ("limit", "1")])
+                    info["ventas"] = "ok"
+                except ErrorSupabase as e:
+                    info["ventas"] = str(e); info["ok"] = False
+                return self.responder(info)
+
+            if ruta == "/api/ventas":
+                grano = (qs.get("grano") or ["dia"])[0]
+                return self.responder({"grano": grano, "desde": desde, "hasta": hasta,
+                                       "serie": ventas_serie(desde, hasta, grano)})
+
+            if ruta == "/api/ventas/detalle":
+                params = [("select", "fecha,cliente,nombre,monto,atribuida_rolo,motivo,nro_orden,contact_id"),
+                          ("order", "fecha.desc,monto.desc"),
+                          ("limit", (qs.get("limit") or ["500"])[0])]
+                params += filtros_fecha(desde, hasta)
+                return self.responder({"ventas": supabase("rolo_ventas", params)})
+
+            if ruta == "/api/gestion":
+                params = [("select", "*"), ("order", "fecha.asc")]
+                params += filtros_fecha(desde, hasta)
+                return self.responder({"informes": supabase("rolo_informes_diarios", params)})
+
+            if ruta == "/api/resumen":
+                tv = totales_ventas(desde, hasta)
+                tg, informes = totales_gestion(desde, hasta)
+                pd, ph = periodo_previo(desde, hasta)
+                previo = None
+                if pd:
+                    pv = totales_ventas(pd, ph)
+                    pg, _ = totales_gestion(pd, ph)
+                    previo = {"desde": pd, "hasta": ph, "ventas": pv, "gestion": pg}
+                # Rango real disponible, para que el front arme los selectores.
+                lim = supabase("rolo_ventas_por_dia", [("select", "fecha"), ("order", "fecha.asc")])
+                return self.responder({
+                    "desde": desde, "hasta": hasta,
+                    "ventas": tv, "gestion": tg, "previo": previo,
+                    "cobertura": {"desde": lim[0]["fecha"] if lim else None,
+                                  "hasta": lim[-1]["fecha"] if lim else None},
+                })
+
+            self.send_error(404, "Ruta desconocida")
+
+        except ErrorSupabase as e:
+            self.responder({"error": str(e)}, 502)
+        except Exception as e:
+            self.responder({"error": f"{type(e).__name__}: {e}"}, 500)
+
+
+if __name__ == "__main__":
+    faltan = [v for v in ("SUPABASE_URL", "SUPABASE_KEY") if not os.environ.get(v)]
+    if faltan:
+        print(f"AVISO: faltan {', '.join(faltan)} — la API va a responder 502.", flush=True)
+    print(f"Panel de Driven escuchando en http://0.0.0.0:{PORT}", flush=True)
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

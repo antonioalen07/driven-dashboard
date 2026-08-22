@@ -1,8 +1,14 @@
-# Para levantarlo local y probarlo antes de subir a EasyPanel:
-#   docker compose up --build   ->  http://localhost:8080
+# Para probarlo local antes de subir a EasyPanel:
+#   cp .env.example .env   (y completá las credenciales)
+#   docker compose up --build      ->  http://localhost:8080
 services:
-  dashboard:
+  panel:
     build: .
     ports:
-      - "8080:80"
+      - "8080:8000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_KEY: ${SUPABASE_KEY}
+      GHL_TOKEN: ${GHL_TOKEN:-}
+      PORT: 8000
     restart: unless-stopped

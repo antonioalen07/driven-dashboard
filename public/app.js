@@ -6,7 +6,72 @@
 (() => {
 'use strict';
 
-const D = window.DRIVEN_DATA || { semanas_historico: [], dias_ventas: [], meses: [] };
+/* ============================================================
+   FUENTE DE DATOS
+   ------------------------------------------------------------
+   El panel prefiere la API (Supabase vía backend). Si no está
+   disponible — porque se abrió el archivo local, o el backend
+   todavía no se desplegó — cae al data.js estático.
+   Así el mismo archivo sirve para las dos etapas.
+   ============================================================ */
+let D = window.DRIVEN_DATA || { semanas_historico: [], dias_ventas: [], meses: [] };
+let FUENTE = 'archivo';   // 'api' | 'archivo'
+
+async function cargarDeApi() {
+  const r = await fetch('/api/gestion', { headers: { 'Accept': 'application/json' } });
+  if (!r.ok) throw new Error('API ' + r.status);
+  const gestion = await r.json();
+
+  const rv = await fetch('/api/ventas?grano=dia');
+  if (!rv.ok) throw new Error('API ventas ' + rv.status);
+  const ventas = await rv.json();
+
+  const informes = gestion.informes || [];
+  const serie    = ventas.serie || [];
+
+  // La API entrega informes DIARIOS; el data.js estático traía semanas.
+  // Se normaliza a la misma forma para no duplicar la lógica de render.
+  const semanas = informes.map(i => {
+    let pay = {};
+    try { pay = typeof i.payload === 'string' ? JSON.parse(i.payload) : (i.payload || {}); } catch (e) {}
+    return {
+      fecha: i.fecha,
+      total_conversaciones: +i.total_conversaciones || 0,
+      enviado_a_web:        +i.enviado_a_web || 0,
+      lead_calificado:      +i.lead_calificado || 0,
+      mala_experiencia:     +i.mala_experiencia || 0,
+      inconclusa:           +i.inconclusa || 0,
+      consulta_comercial:   +i.consulta_comercial || 0,
+      tasa_resolucion_pct:  +i.tasa_resolucion_pct || 0,
+      score_promedio:       +i.score_promedio || 0,
+      // Ventas confirmadas por CRM; si el informe viene del Excel v1,
+      // el conteo estimado está en el payload.
+      ventas_rolo_v1: +i.ventas_web_confirmadas || +pay.ventas_estimadas_rolo_v1 || 0,
+      productos_top: pay.productos_top || [],
+      problemas:     pay.problemas || [],
+      _origen: pay.origen || 'tracking',
+    };
+  });
+
+  const dias = serie.map(v => ({
+    fecha: v.fecha,
+    ventas_confirmadas:     +v.ventas_confirmadas || 0,
+    monto:                  +v.monto_total || 0,
+    ventas_atribuidas_rolo: +v.ventas_atribuidas || 0,
+    monto_atribuido:        +v.monto_atribuido || 0,
+    ventas_no_atribuibles:  +v.ventas_no_atribuibles || 0,
+    monto_no_atribuible:    +v.monto_no_atribuible || 0,
+    detalle: [],
+  }));
+
+  const meses = [...new Set([...semanas, ...dias].map(x => String(x.fecha).slice(0,7)))].sort();
+  return {
+    generado: new Date().toISOString(),
+    meses, semanas_historico: semanas, dias_ventas: dias,
+    tasas_corregidas: [],
+    rolo_operativo: dias.some(d => d.ventas_atribuidas_rolo > 0),
+  };
+}
 // Filtro de período: modo + rango efectivo [desde, hasta] en ISO.
 // 'todos' = sin límites; 'mes' = un mes; 'dia' = un día; 'custom' = a medida.
 let FILTRO = { modo: 'todos', desde: null, hasta: null, mes: null, dia: null };
@@ -703,6 +768,28 @@ function renderTorta() {
 /* ============================================================
    VENTAS — tabla
    ============================================================ */
+async function cargarDetalleVentas() {
+  if (FUENTE !== 'api') return;
+  const q = new URLSearchParams();
+  if (FILTRO.desde) q.set('desde', FILTRO.desde);
+  if (FILTRO.hasta) q.set('hasta', FILTRO.hasta);
+  try {
+    const r = await fetch('/api/ventas/detalle?' + q);
+    if (!r.ok) return;
+    const { ventas } = await r.json();
+    const porDia = new Map();
+    (ventas || []).forEach(x => {
+      const f = String(x.fecha).slice(0,10);
+      if (!porDia.has(f)) porDia.set(f, []);
+      porDia.get(f).push({ cliente: x.cliente || '—', nombre: x.nombre || '—',
+                           monto: +x.monto || 0, contact_id: x.contact_id,
+                           atribuida: x.atribuida_rolo === true, motivo: x.motivo });
+    });
+    D.dias_ventas.forEach(d => { d.detalle = porDia.get(d.fecha) || []; });
+    renderTablaVta();
+  } catch (e) { /* la tabla queda vacía, el resto del panel funciona */ }
+}
+
 function renderTablaVta() {
   const v = dias(), tb = document.querySelector('#t-vta tbody');
   const filas = [];
@@ -787,10 +874,21 @@ function render() {
     renderTablaSem();
   } else {
     renderKpisVentas(); renderVentas(); renderTorta(); renderTablaVta();
+    cargarDetalleVentas();   // el detalle se pide aparte, no bloquea el render
   }
 }
 
-function init() {
+async function init() {
+  // Se intenta la API primero. Si falla, seguimos con el data.js incluido.
+  try {
+    const datos = await cargarDeApi();
+    if (datos.semanas_historico.length || datos.dias_ventas.length) {
+      D = datos; FUENTE = 'api';
+    }
+  } catch (e) {
+    console.info('API no disponible, usando datos del archivo:', e.message);
+  }
+
   // ---------- filtro de período ----------
   const elModo = document.getElementById('fModo');
   const elMes  = document.getElementById('fMes');
@@ -876,6 +974,15 @@ function init() {
   const g = document.getElementById('gen');
   if (g && D.generado) g.textContent = new Date(D.generado).toLocaleDateString('es-AR',
     { day:'2-digit', month:'2-digit', year:'numeric' });
+
+  const f = document.getElementById('fuente');
+  if (f) {
+    f.textContent = FUENTE === 'api' ? 'en vivo desde Supabase' : 'datos precargados';
+    f.title = FUENTE === 'api'
+      ? 'El panel consulta la base de datos en cada carga.'
+      : 'El backend no respondió: se muestran los datos del archivo incluido.';
+    f.style.color = FUENTE === 'api' ? 'var(--ok)' : 'var(--ink-3)';
+  }
 }
 
 document.readyState === 'loading'
