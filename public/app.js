@@ -16,6 +16,7 @@
    ============================================================ */
 let D = window.DRIVEN_DATA || { semanas_historico: [], dias_ventas: [], meses: [] };
 let FUENTE = 'archivo';   // 'api' | 'archivo'
+let ERROR_API = null;     // por que fallo la API, si fallo
 
 async function cargarDeApi() {
   const r = await fetch('/api/gestion', { headers: { 'Accept': 'application/json' } });
@@ -921,6 +922,7 @@ async function init() {
     }
   } catch (e) {
     console.info('API no disponible, usando datos del archivo:', e.message);
+    ERROR_API = e.message;
   }
 
   // ---------- filtro de período ----------
@@ -1008,6 +1010,22 @@ async function init() {
   const g = document.getElementById('gen');
   if (g && D.generado) g.textContent = new Date(D.generado).toLocaleDateString('es-AR',
     { day:'2-digit', month:'2-digit', year:'numeric' });
+
+  // Si el panel cayo al archivo estatico, hay que decirlo fuerte: los numeros
+  // son de la ultima vez que se genero data.js, no de Supabase. Un aviso
+  // discreto en el pie no alcanza para evitar decisiones sobre datos viejos.
+  const avisos = document.getElementById('avisos');
+  if (avisos && FUENTE !== 'api' && !avisos.querySelector('.aviso-fuente')) {
+    const gen = (window.DRIVEN_DATA || {}).generado;
+    const el = document.createElement('div');
+    el.className = 'nota aviso-fuente';
+    el.style.cssText = 'border-left:4px solid var(--brand);background:color-mix(in srgb,var(--brand) 8%,transparent);padding:var(--sp-2);margin-bottom:var(--sp-2)';
+    el.innerHTML = '<b>Datos precargados, no en vivo.</b> El panel no pudo leer Supabase'
+      + (ERROR_API ? ' (' + ERROR_API + ')' : '') + ', asi que muestra el respaldo del archivo'
+      + (gen ? ' generado el ' + new Date(gen).toLocaleString('es-AR') : '')
+      + '. Las ventas y conversaciones posteriores a esa fecha NO estan incluidas.';
+    avisos.appendChild(el);
+  }
 
   const f = document.getElementById('fuente');
   if (f) {
