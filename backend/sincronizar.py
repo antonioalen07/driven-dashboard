@@ -6,9 +6,10 @@ Deja en `rolo_ventas` cada venta ganada del CRM, con su decisión de
 atribución. Es idempotente: se puede correr cuantas veces haga falta,
 porque hace UPSERT por `oportunidad_id`.
 
-    python3 backend/sincronizar.py              # últimos 30 días
-    python3 backend/sincronizar.py --todo       # todo el histórico
-    python3 backend/sincronizar.py --historico  # + las semanas del Excel
+    python3 backend/sincronizar.py                    # últimos 30 días
+    python3 backend/sincronizar.py --todo             # todo el histórico
+    python3 backend/sincronizar.py --desde 2026-08-15 # desde una fecha
+    python3 backend/sincronizar.py --historico        # + las semanas del Excel
 
 Variables de entorno:
     GHL_TOKEN       token de la API de GoHighLevel   (pit-...)
@@ -128,6 +129,8 @@ def mapear(op):
                         or "compro-en-web" in [t.lower() for t in (contacto.get("tags") or [])],
         "origen": "ghl",
         "actualizado_en": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        # atribuida_rolo / motivo NO se envían: los decide el flujo de tracking.
+        # Si se mandaran, un resync pisaría la atribución con el default (false).
     }
 
 
@@ -223,7 +226,22 @@ def main():
     ops = traer_ventas()
     filas = [mapear(o) for o in ops if o.get("id") and dia_ar(o.get("lastStatusChangeAt") or o.get("createdAt"))]
 
-    if "--todo" not in args and "--historico" not in args:
+    # --desde YYYY-MM-DD acota el rango sin traer todo el histórico.
+    desde = None
+    if "--desde" in args:
+        i = args.index("--desde")
+        if i + 1 >= len(args):
+            raise SystemExit("ERROR: --desde necesita una fecha (YYYY-MM-DD)")
+        desde = args[i + 1]
+        try:
+            datetime.date.fromisoformat(desde)
+        except ValueError:
+            raise SystemExit(f"ERROR: fecha inválida '{desde}', se espera YYYY-MM-DD")
+
+    if desde:
+        filas = [f for f in filas if f["fecha"] >= desde]
+        print(f"  (desde {desde})")
+    elif "--todo" not in args and "--historico" not in args:
         corte = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
         filas = [f for f in filas if f["fecha"] >= corte]
         print(f"  (últimos 30 días; usá --todo para el histórico completo)")

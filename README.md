@@ -81,6 +81,13 @@ conserve el historial ni de recalcular la atribución cada vez.
 | `GET /api/resumen?desde=&hasta=` | KPIs + comparación con el período previo |
 | `GET /api/versiones` | Compara Rolo v1 vs v2, normalizado por semana |
 
+> **Todas las ventas se registran, atribuidas o no.** El flujo guarda en
+> `rolo_ventas` cada venta ganada del CRM —haya pasado por Rolo o no— con el
+> motivo de la decisión (`asesorada_por_rolo`, `sin_conversacion_con_rolo`,
+> `compro_antes_de_hablar`…). Así el total facturado del período siempre cierra
+> contra el CRM, y la atribución es una lectura sobre ese total, no un filtro
+> que descarta ventas.
+>
 > **Sobre la atribución:** hoy figura en 0% porque Rolo todavía no opera. Las ventas
 > que se ven son reales, pero ninguna se le atribuye aún. Cuando el agente entre en
 > operación y el flujo `Rolo - Tracking Diario v2` empiece a correr, el panel separa
@@ -105,6 +112,11 @@ python3 backend/sincronizar.py --historico --todo
 ```
 - `--historico` carga las 16 semanas del Excel (Rolo v1)
 - `--todo` trae todas las ventas de GHL; sin ese flag solo los últimos 30 días
+- `--desde 2026-08-15` acota a un rango puntual
+
+El sincronizador **no toca** `atribuida_rolo` ni `motivo`: esas columnas las
+decide el flujo de tracking. Por eso se puede resincronizar cuantas veces haga
+falta sin borrar la atribución ya calculada.
 
 Es **idempotente**: se puede correr las veces que haga falta, hace UPSERT.
 
