@@ -326,7 +326,10 @@ class Handler(BaseHTTPRequestHandler):
             if ruta == "/api/ventas/detalle":
                 params = [("select", "fecha,cliente,nombre,monto,atribuida_rolo,motivo,"
                                      "nro_orden,contact_id,canal,computa"),
-                          ("order", "fecha.desc,monto.desc"),
+                          # Más reciente primero y, dentro del día, por nº de
+                          # orden: la #1265 va arriba de la #1264 aunque sea
+                          # más chica. Por monto se leía como desorden.
+                          ("order", "fecha.desc,nro_orden.desc"),
                           ("limit", (qs.get("limit") or ["500"])[0])]
                 params += filtros_fecha(desde, hasta)
                 # La tabla del panel muestra la facturación del período: lo que

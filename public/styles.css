@@ -157,6 +157,17 @@ h1,h2,h3,.display {
   min-height: 36px; transition: background .18s, color .18s;
 }
 .seg button:hover { color: var(--ink); }
+/* Variante chica: el selector de grano vive dentro del header de una card,
+   no en la topbar, así que no debe competir visualmente con el título. */
+.seg-sm button { font-size: 12px; padding: 6px 11px; min-height: 30px; }
+/* Header de card con acción a la derecha. En pantalla angosta se apila
+   para que el selector no empuje al título. */
+.card-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3);
+}
+.card-head h3 { margin: 0; }
+.card-head .hint { margin: 4px 0 0; }
 .seg button[aria-pressed="true"] {
   background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
 }
@@ -290,7 +301,15 @@ th.sortable { cursor: pointer; user-select: none; }
 th.sortable:hover { color: var(--ink); }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: var(--surface-2); }
-td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Las columnas numéricas se alinean a la derecha CABECERA INCLUIDA: si solo
+   se alinea el td, el título queda a la izquierda y el número a la derecha,
+   y la columna se lee corrida. */
+td.n, th.n { text-align: right; }
+td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* La barra de tasa vive dentro de un td.n: se alinea a la derecha como el
+   resto de los números, en vez de quedar pegada al borde izquierdo. */
+td.n .bar-mini { justify-content: flex-end; }
 
 .chip {
   display: inline-flex; align-items: center; gap: 6px;

@@ -105,6 +105,10 @@ async function cargarDeApi() {
 let FILTRO = { modo: 'todos', desde: null, hasta: null, mes: null, dia: null };
 let VIEW = 'gestion';
 let SORT = { k: 'fecha', dir: -1 };
+// Grano del detalle de gestión: 'dia' | 'semana' | 'mes'.
+// Arranca en 'dia' porque el v2 registra diario; el v1 (semanal) se
+// muestra igual, sin partirse, para no inventar números por día.
+let GRANO = 'dia';
 const OCULTAS = new Set();   // series apagadas desde la leyenda
 
 /* ---------------- helpers ---------------- */
@@ -628,8 +632,76 @@ function listaFrec(id, campo, color, usarFamilias) {
 /* ============================================================
    Tabla semanal
    ============================================================ */
+/* ============================================================
+   Agrupar el detalle por día / semana / mes
+   ------------------------------------------------------------
+   Las filas del v1 son SEMANALES y las del v2 son DIARIAS. Agrupar
+   por día una fila semanal daría un número falso (mostraría 140
+   conversaciones "del 9 de marzo" cuando son de toda esa semana).
+   Por eso cada fila se ubica en el bucket que le corresponde y las
+   semanales nunca se parten: se muestran tal cual en grano día.
+   ============================================================ */
+function lunesDe(f) {
+  const d = day(f);
+  const dow = (d.getDay() + 6) % 7;       // 0 = lunes
+  d.setDate(d.getDate() - dow);
+  const p = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+}
+
+function agruparPorGrano(filas, grano) {
+  // En grano día las filas pasan tal cual, pero la tasa se recalcula igual:
+  // si la fila no la trae (o viene desactualizada), se deriva de sus propios
+  // totales en vez de quedar en blanco.
+  if (grano === 'dia') return filas.map(r => ({
+    ...r,
+    tasa_resolucion_pct: num(r.total_conversaciones)
+      ? num(r.enviado_a_web) / num(r.total_conversaciones) * 100
+      : num(r.tasa_resolucion_pct),
+  }));
+
+  const clave = f => grano === 'mes' ? String(f).slice(0,7) + '-01' : lunesDe(f);
+  const por = new Map();
+  filas.forEach(r => {
+    const k = clave(r.fecha);
+    if (!por.has(k)) {
+      por.set(k, { fecha: k, total_conversaciones:0, enviado_a_web:0, lead_calificado:0,
+                   mala_experiencia:0, inconclusa:0, consulta_comercial:0,
+                   ventas_confirmadas:0, ventas_estimadas:0, monto_estimado:0,
+                   ventas_rolo_v1:0, _scores:[], es_estimado:false, _filas:0 });
+    }
+    const a = por.get(k);
+    ['total_conversaciones','enviado_a_web','lead_calificado','mala_experiencia',
+     'inconclusa','consulta_comercial','ventas_confirmadas','ventas_estimadas',
+     'monto_estimado','ventas_rolo_v1'].forEach(x => { a[x] += num(r[x]); });
+    // El score es un promedio, no una suma: se promedia ponderando por fila.
+    if (num(r.score_promedio)) a._scores.push(num(r.score_promedio));
+    // Si alguna fila del bucket es estimada, el bucket entero se marca.
+    if (r.es_estimado) a.es_estimado = true;
+    a._filas++;
+  });
+
+  return [...por.values()].map(a => {
+    a.score_promedio = a._scores.length
+      ? a._scores.reduce((x,y) => x+y, 0) / a._scores.length : 0;
+    // La tasa se RECALCULA sobre los totales del bucket. Promediar
+    // porcentajes de días con volúmenes distintos da un número falso.
+    a.tasa_resolucion_pct = a.total_conversaciones
+      ? a.enviado_a_web / a.total_conversaciones * 100 : 0;
+    return a;
+  });
+}
+
 function renderTablaSem() {
-  const s = semanas().slice();
+  const s = agruparPorGrano(semanas(), GRANO);
+
+  // El encabezado dice qué se está mirando.
+  const LAB = { dia:'día', semana:'semana', mes:'mes' };
+  const th = document.getElementById('th-periodo');
+  const tit = document.getElementById('t-sem-titulo');
+  if (th)  th.textContent  = GRANO === 'dia' ? 'Día' : (GRANO === 'semana' ? 'Semana' : 'Mes');
+  if (tit) tit.textContent = `Detalle por ${LAB[GRANO]}`;
+
   s.sort((a,b) => {
     const k = SORT.k;
     const va = k === 'fecha' ? day(a.fecha).getTime() : num(a[k]);
@@ -641,7 +713,7 @@ function renderTablaSem() {
   tb.innerHTML = s.map(d => {
     const t = num(d.tasa_resolucion_pct);
     return `<tr>
-      <td style="white-space:nowrap"><b>${dLab(d.fecha)}</b></td>
+      <td style="white-space:nowrap"><b>${GRANO === 'mes' ? mLab(String(d.fecha).slice(0,7)) : dLab(d.fecha)}</b></td>
       <td class="n">${fmt(d.total_conversaciones)}</td>
       <td class="n" style="color:${css('--s2')};font-weight:700">${fmt(d.enviado_a_web)}</td>
       <td class="n"><span class="bar-mini">
@@ -859,6 +931,7 @@ async function cargarDetalleVentas() {
                            atribuida: x.atribuida_rolo === true, motivo: x.motivo,
                            // Si el backend aún no manda canal, se deduce del
                            // nº de orden: con orden vino de la tienda.
+                           nro_orden: x.nro_orden,
                            canal: x.canal || (x.atribuida_rolo === true ? 'rolo'
                                    : (x.nro_orden ? 'web_directa' : 'asesor')) });
     });
@@ -871,7 +944,14 @@ function renderTablaVta() {
   const v = dias(), tb = document.querySelector('#t-vta tbody');
   const filas = [];
   v.forEach(d => (d.detalle||[]).forEach(x => filas.push({ ...x, fecha: d.fecha })));
-  filas.sort((a,b) => day(b.fecha) - day(a.fecha) || b.monto - a.monto);
+  // Más reciente primero. Dentro del mismo día se ordena por Nº DE ORDEN
+  // descendente, no por monto: la #1265 va arriba de la #1264 aunque sea
+  // más chica. Ordenar por monto dentro del día se leía como desorden.
+  const ord = f => {
+    const m = String(f.nombre || '').match(/#\s*(\d+)/);
+    return m ? +m[1] : (f.nro_orden ? +f.nro_orden : -1);
+  };
+  filas.sort((a,b) => day(b.fecha) - day(a.fecha) || ord(b) - ord(a) || b.monto - a.monto);
   if (!filas.length) { tb.innerHTML = '<tr><td colspan="5" class="empty">Sin ventas en el período.</td></tr>'; return; }
 
   // Cada venta muestra su canal, no un binario. "Sin atribuir" mezclaba
@@ -1054,6 +1134,14 @@ async function init() {
     document.querySelectorAll('.seg button[data-view]').forEach(o =>
       o.setAttribute('aria-pressed', String(o === b)));
     render();
+  });
+
+  // Grano del detalle: solo re-renderiza esa tabla, no el panel entero.
+  document.querySelectorAll('.seg button[data-grano]').forEach(b => b.onclick = () => {
+    GRANO = b.dataset.grano;
+    document.querySelectorAll('.seg button[data-grano]').forEach(o =>
+      o.setAttribute('aria-pressed', String(o === b)));
+    renderTablaSem();
   });
 
   document.querySelectorAll('#t-sem th.sortable').forEach(th => th.onclick = () => {

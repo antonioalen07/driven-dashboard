@@ -109,11 +109,20 @@
     </div>
 
     <div class="card" style="margin-top:var(--sp-3)">
-      <h3>Detalle por semana</h3>
-      <p class="hint">Clic en el encabezado para ordenar.</p>
+      <div class="card-head">
+        <div>
+          <h3 id="t-sem-titulo">Detalle por día</h3>
+          <p class="hint">Clic en el encabezado para ordenar.</p>
+        </div>
+        <div class="seg seg-sm" role="group" aria-label="Agrupar por">
+          <button data-grano="dia"     aria-pressed="true">Día</button>
+          <button data-grano="semana"  aria-pressed="false">Semana</button>
+          <button data-grano="mes"     aria-pressed="false">Mes</button>
+        </div>
+      </div>
       <div class="tw"><table id="t-sem">
         <thead><tr>
-          <th class="sortable" data-k="fecha">Semana</th>
+          <th class="sortable" data-k="fecha" id="th-periodo">Día</th>
           <th class="sortable n" data-k="total_conversaciones">Convs</th>
           <th class="sortable n" data-k="enviado_a_web">A la web</th>
           <th class="sortable n" data-k="tasa_resolucion_pct">Tasa</th>

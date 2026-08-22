@@ -157,16 +157,19 @@ def clasificar_canal(fila):
 
 
 def completar_nuevas(filas):
-    """Agrega canal/computa SOLO a las ventas que no están en la base.
+    """Parte las ventas en (ya existentes, nuevas) y clasifica solo las nuevas.
 
     Por qué hace falta: el UPSERT usa merge-duplicates, así que cualquier
     campo enviado pisa el valor existente. Si mandáramos 'canal' en todas
     las filas, un resync borraría los canales 'rolo' que decidió n8n.
 
-    Se consulta qué ids ya existen y se completan únicamente los nuevos.
+    Devuelve DOS listas porque PostgREST exige que todas las filas de un
+    mismo POST tengan exactamente las mismas claves ("All object keys must
+    match"). Las nuevas llevan canal/computa y las viejas no, así que van
+    en lotes separados.
     """
     if not filas:
-        return filas
+        return filas, []
     existentes = set()
     ids = [f["oportunidad_id"] for f in filas]
     # De a 100 para no armar una URL gigante.
@@ -179,20 +182,21 @@ def completar_nuevas(filas):
                                    "oportunidad_id": f"in.({lista})"}) or []:
                 existentes.add(r["oportunidad_id"])
         except Exception as e:
-            # Ante la duda, no tocar el canal de nadie.
+            # Ante la duda, no tocar el canal de nadie: todas como existentes.
             print(f"  aviso: no se pudo verificar duplicados ({e}); no se asigna canal")
-            return filas
+            return filas, []
 
-    nuevas = 0
+    ya, nuevas = [], []
     for f in filas:
         if f["oportunidad_id"] in existentes:
-            continue
-        f["canal"] = clasificar_canal(f)
-        f["computa"] = f["fecha"] >= INICIO_TRACKING and f["monto"] > 0
-        nuevas += 1
+            ya.append(f)
+        else:
+            f["canal"] = clasificar_canal(f)
+            f["computa"] = f["fecha"] >= INICIO_TRACKING and f["monto"] > 0
+            nuevas.append(f)
     if nuevas:
-        print(f"  {nuevas} ventas nuevas clasificadas por canal")
-    return filas
+        print(f"  {len(nuevas)} ventas nuevas clasificadas por canal")
+    return ya, nuevas
 
 
 def ticket_referencia():
@@ -307,8 +311,11 @@ def main():
         filas = [f for f in filas if f["fecha"] >= corte]
         print(f"  (últimos 30 días; usá --todo para el histórico completo)")
 
-    filas = completar_nuevas(filas)
-    n = upsert("rolo_ventas", filas, "oportunidad_id")
+    # Dos lotes: las que ya existen (sin canal, para no pisar a n8n) y las
+    # nuevas (con canal). PostgREST no acepta claves distintas en un lote.
+    ya, nuevas = completar_nuevas(filas)
+    n = upsert("rolo_ventas", ya, "oportunidad_id") \
+      + upsert("rolo_ventas", nuevas, "oportunidad_id")
     monto = sum(f["monto"] for f in filas)
     print(f"  {n} ventas sincronizadas | ${monto:,.0f}")
     if filas:
