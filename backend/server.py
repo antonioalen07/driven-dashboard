@@ -10,6 +10,7 @@ nunca ve credenciales: todas las consultas pasan por acá.
     GET /api/ventas/detalle?desde=&hasta=   cada venta del rango
     GET /api/gestion?desde=&hasta=          informes diarios de Rolo
     GET /api/resumen?desde=&hasta=          KPIs + comparación con el período previo
+    GET /api/versiones                      compara Rolo v1 vs v2 (normalizado por semana)
 
 Variables de entorno (todas del lado del servidor):
     SUPABASE_URL        https://xxxx.supabase.co
@@ -125,9 +126,12 @@ def totales_ventas(desde, hasta):
     return t
 
 
-def totales_gestion(desde, hasta):
+def totales_gestion(desde, hasta, solo_v2=False):
     params = [("select", "*"), ("order", "fecha.asc")]
     params += filtros_fecha(desde, hasta)
+    # Los KPIs de facturación nunca deben incluir estimaciones del v1.
+    if solo_v2:
+        params.append(("metodologia", "eq.v2_confirmado"))
     filas = supabase("rolo_informes_diarios", params)
     t = {"conversaciones": 0, "enviado_a_web": 0, "leads": 0, "b2b": 0,
          "mala_experiencia": 0, "dias": len(filas), "score": 0.0}
@@ -143,6 +147,78 @@ def totales_gestion(desde, hasta):
     t["score"] = round(sum(scores)/len(scores), 2) if scores else 0.0
     t["tasa"] = round(t["enviado_a_web"]/t["conversaciones"]*100, 1) if t["conversaciones"] else 0.0
     return t, filas
+
+
+def comparar_versiones():
+    """Compara el Rolo v1 contra el v2, normalizado a base semanal.
+
+    La comparación directa sería injusta: el v1 duró ~16 semanas y el v2
+    lleva pocos días. Por eso todo se divide por las semanas cubiertas.
+
+    Las ventas del v1 son ESTIMADAS (conteo por IA, valorizado con la
+    mediana de las ventas reales). Se devuelven en campos separados y
+    marcados, nunca sumadas a la facturación confirmada.
+    """
+    filas = supabase("rolo_informes_diarios",
+                     [("select", "*"), ("order", "fecha.asc")])
+    if not filas:
+        return {"versiones": [], "aviso": "Sin datos cargados todavía."}
+
+    grupos = {}
+    for f in filas:
+        met = f.get("metodologia") or "v2_confirmado"
+        g = grupos.setdefault(met, {
+            "metodologia": met, "fechas": [],
+            "conversaciones": 0, "a_la_web": 0, "leads": 0, "mala_experiencia": 0,
+            "ventas_confirmadas": 0, "monto_confirmado": 0,
+            "ventas_estimadas": 0, "monto_estimado": 0, "scores": [],
+        })
+        g["fechas"].append(str(f["fecha"]))
+        g["conversaciones"]     += int(f.get("total_conversaciones") or 0)
+        g["a_la_web"]           += int(f.get("enviado_a_web") or 0)
+        g["leads"]              += int(f.get("lead_calificado") or 0)
+        g["mala_experiencia"]   += int(f.get("mala_experiencia") or 0)
+        g["ventas_confirmadas"] += int(f.get("ventas_web_confirmadas") or 0)
+        g["monto_confirmado"]   += int(f.get("monto_atribuido") or 0)
+        g["ventas_estimadas"]   += int(f.get("ventas_estimadas_v1") or 0)
+        g["monto_estimado"]     += int(f.get("monto_estimado_v1") or 0)
+        sc = float(f.get("score_promedio") or 0)
+        if sc: g["scores"].append(sc)
+
+    salida = []
+    for met, g in grupos.items():
+        fechas = sorted(g["fechas"])
+        d0 = datetime.date.fromisoformat(fechas[0])
+        d1 = datetime.date.fromisoformat(fechas[-1])
+        # El v1 es semanal: la última fila cubre 7 días más.
+        span = (d1 - d0).days + (7 if met == "v1_estimado" else 1)
+        semanas = max(1.0, span / 7.0)
+
+        ventas = g["ventas_confirmadas"] + g["ventas_estimadas"]
+        valor  = g["monto_confirmado"] + g["monto_estimado"]
+        salida.append({
+            "metodologia": met,
+            "etiqueta": "Rolo v1 (estimado)" if met == "v1_estimado" else "Rolo v2 (confirmado)",
+            "es_estimado": met == "v1_estimado",
+            "desde": fechas[0], "hasta": fechas[-1],
+            "semanas": round(semanas, 1),
+            "conversaciones": g["conversaciones"],
+            "convs_por_semana": round(g["conversaciones"] / semanas),
+            "a_la_web": g["a_la_web"],
+            "tasa_resolucion": round(100.0 * g["a_la_web"] / g["conversaciones"], 1) if g["conversaciones"] else 0.0,
+            "leads": g["leads"],
+            "mala_experiencia": g["mala_experiencia"],
+            "ventas": ventas,
+            "ventas_por_semana": round(ventas / semanas, 1),
+            "valor": valor,
+            "valor_por_semana": round(valor / semanas),
+            "score": round(sum(g["scores"]) / len(g["scores"]), 2) if g["scores"] else 0.0,
+            # Se explicita de dónde sale cada número
+            "ventas_confirmadas": g["ventas_confirmadas"],
+            "ventas_estimadas": g["ventas_estimadas"],
+        })
+    salida.sort(key=lambda x: x["desde"])
+    return {"versiones": salida}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -220,6 +296,9 @@ class Handler(BaseHTTPRequestHandler):
                 params = [("select", "*"), ("order", "fecha.asc")]
                 params += filtros_fecha(desde, hasta)
                 return self.responder({"informes": supabase("rolo_informes_diarios", params)})
+
+            if ruta == "/api/versiones":
+                return self.responder(comparar_versiones())
 
             if ruta == "/api/resumen":
                 tv = totales_ventas(desde, hasta)

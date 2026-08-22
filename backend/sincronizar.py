@@ -52,6 +52,20 @@ def traer_ventas():
     return todas
 
 
+def supabase_get(tabla, params=None):
+    """GET contra PostgREST, para leer datos ya cargados."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        raise SystemExit("ERROR: faltan SUPABASE_URL o SUPABASE_KEY")
+    url = f"{SUPABASE_URL}/rest/v1/{tabla}"
+    if params:
+        url += "?" + urllib.parse.urlencode(params, safe="().,*")
+    req = urllib.request.Request(url, headers={
+        "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+        "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read().decode())
+
+
 def upsert(tabla, filas, on_conflict):
     """UPSERT vía PostgREST. En lotes, para no mandar un payload gigante."""
     if not filas:
@@ -117,23 +131,55 @@ def mapear(op):
     }
 
 
-def cargar_historico_excel():
+def ticket_referencia():
+    """Mediana de las ventas reales del CRM.
+
+    Se usa la MEDIANA y no el promedio: una sola venta muy grande
+    (hay una de $1,5M) inflaría el promedio ~13% y sobreestimaría
+    el valor del histórico. La mediana es más honesta.
+
+    Devuelve 0 si todavía no hay ventas cargadas.
+    """
+    try:
+        filas = supabase_get("rolo_ventas", [("select", "monto"), ("order", "monto.asc")])
+    except Exception:
+        return 0
+    montos = sorted(float(f["monto"]) for f in filas if f.get("monto"))
+    if not montos:
+        return 0
+    n = len(montos)
+    return round(montos[n//2] if n % 2 else (montos[n//2-1] + montos[n//2]) / 2)
+
+
+def cargar_historico_excel(ticket=None):
     """Las 16 semanas del Rolo v1 -> rolo_informes_diarios.
 
-    Ojo: son SEMANAS, no días, y las ventas son un conteo que hizo la IA
-    leyendo conversaciones (sin monto ni cliente). Se cargan como informes
-    con la fecha de inicio de cada semana y payload marcado, para que el
-    dashboard pueda distinguirlas de los datos diarios reales.
+    Son SEMANAS (no días) y las ventas son un conteo que hizo la IA
+    leyendo conversaciones: sin monto, sin cliente, sin nº de orden.
+
+    Por eso NO van a ventas_web_confirmadas, que es exclusiva de ventas
+    confirmadas por el CRM. Van a ventas_estimadas_v1, con metodologia
+    = 'v1_estimado', para que ninguna consulta las mezcle por accidente.
+
+    El monto estimado (ventas × ticket de referencia) sirve para
+    dimensionar cuánto generó el v1 y compararlo con el v2.
     """
     f = RAIZ / "scripts" / "historico_semanal.json"
     if not f.exists():
         print("  (sin historico_semanal.json, se omite)")
         return 0
     semanas = json.loads(f.read_text(encoding="utf-8"))
+    if ticket is None:
+        ticket = ticket_referencia()
     filas = []
     for s in semanas:
+        ventas_v1 = int(s.get("ventas_rolo_v1", 0) or 0)
         filas.append({
             "fecha": s["fecha"],
+            "metodologia": "v1_estimado",
+            "granularidad": "semanal",
+            "ventas_estimadas_v1": ventas_v1,
+            "monto_estimado_v1": int(ventas_v1 * ticket),
             "total_conversaciones": s.get("total_conversaciones", 0),
             "enviado_a_web": s.get("enviado_a_web", 0),
             "lead_calificado": s.get("lead_calificado", 0),
@@ -142,30 +188,35 @@ def cargar_historico_excel():
             "consulta_comercial": s.get("consulta_comercial", 0),
             "tasa_resolucion_pct": s.get("tasa_resolucion_pct", 0),
             "score_promedio": s.get("score_promedio", 0),
-            # Las ventas del v1 NO van a ventas_web_confirmadas: esa columna
-            # es para ventas confirmadas por CRM. Van en el payload, marcadas.
+            # ventas_web_confirmadas queda en 0 a propósito: es exclusiva
+            # de ventas confirmadas por el CRM.
             "informe_narrativo": None,
             "payload": json.dumps({
                 "origen": "excel_rolo_v1",
-                "granularidad": "semanal",
-                "advertencia": "Conteo estimado por IA sobre conversaciones. Sin monto ni cliente.",
-                "ventas_estimadas_rolo_v1": s.get("ventas_rolo_v1", 0),
+                "advertencia": "Conteo estimado por IA sobre conversaciones. Sin monto ni cliente reales.",
+                "ticket_referencia_usado": ticket,
                 "productos_top": s.get("productos_top", []),
                 "problemas": s.get("problemas", []),
             }, ensure_ascii=False),
         })
-    return upsert("rolo_informes_diarios", filas, "fecha")
+    n = upsert("rolo_informes_diarios", filas, "fecha")
+    total_v1 = sum(f["ventas_estimadas_v1"] for f in filas)
+    print(f"  ticket de referencia (mediana): ${ticket:,}")
+    print(f"  {total_v1} ventas estimadas -> valor estimado ${total_v1*ticket:,}")
+    return n
 
 
 def main():
     args = sys.argv[1:]
-    if "--historico" in args:
-        print("Cargando histórico del Excel (Rolo v1)...")
-        n = cargar_historico_excel()
-        print(f"  {n} semanas cargadas en rolo_informes_diarios")
 
     if not GHL_TOKEN:
-        print("Sin GHL_TOKEN: no se sincronizan ventas.")
+        print("Sin GHL_TOKEN: no se sincronizan ventas de GHL.")
+        if "--historico" in args:
+            # Se puede cargar igual, pero sin ventas el ticket no se puede
+            # calcular: se avisa en vez de inventar un número.
+            print("Cargando histórico del Excel (Rolo v1)...")
+            n = cargar_historico_excel()
+            print(f"  {n} semanas cargadas")
         return
 
     print("Trayendo ventas de GoHighLevel...")
@@ -182,7 +233,15 @@ def main():
     print(f"  {n} ventas sincronizadas | ${monto:,.0f}")
     if filas:
         print(f"  rango: {min(f['fecha'] for f in filas)} -> {max(f['fecha'] for f in filas)}")
-    print("Listo.")
+
+    # El histórico va al final: necesita las ventas ya cargadas para
+    # calcular el ticket de referencia con la mediana real.
+    if "--historico" in args:
+        print("\nCargando histórico del Excel (Rolo v1)...")
+        n = cargar_historico_excel()
+        print(f"  {n} semanas cargadas en rolo_informes_diarios")
+
+    print("\nListo.")
 
 
 if __name__ == "__main__":

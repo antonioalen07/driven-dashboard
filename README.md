@@ -79,6 +79,7 @@ conserve el historial ni de recalcular la atribución cada vez.
 | `GET /api/ventas/detalle?desde=&hasta=` | Cada venta del rango |
 | `GET /api/gestion?desde=&hasta=` | Informes diarios |
 | `GET /api/resumen?desde=&hasta=` | KPIs + comparación con el período previo |
+| `GET /api/versiones` | Compara Rolo v1 vs v2, normalizado por semana |
 
 > **Sobre la atribución:** hoy figura en 0% porque Rolo todavía no opera. Las ventas
 > que se ven son reales, pero ninguna se le atribuye aún. Cuando el agente entre en
@@ -93,6 +94,7 @@ conserve el historial ni de recalcular la atribución cada vez.
 En el SQL Editor, ejecutar en orden:
 1. `tracking-diario/02_tabla_informes.sql` — resumen diario (quizá ya lo hiciste)
 2. `tracking-diario/04_tabla_ventas.sql` — histórico de ventas + vista
+3. `tracking-diario/05_historico_v1.sql` — columnas para separar el histórico v1
 
 ### 2. Cargar los datos
 ```bash
@@ -169,6 +171,35 @@ dashboard-driven/
 ```
 
 ---
+
+## Las dos épocas de Rolo
+
+El agente tuvo dos versiones que midieron de formas distintas. **No se pueden
+sumar**, y el sistema lo hace imposible por diseño.
+
+| | Rolo v1 (mar–jun 2026) | Rolo v2 (desde ago 2026) |
+|---|---|---|
+| Origen del dato | IA leyendo conversaciones | CRM + TiendaNube |
+| Grano | Semanal | Diario |
+| Monto | ✗ estimado | ✓ real |
+| Cliente / nº orden | ✗ | ✓ |
+| Columna | `ventas_estimadas_v1` | `ventas_web_confirmadas` |
+| Marca | `metodologia = 'v1_estimado'` | `metodologia = 'v2_confirmado'` |
+
+**Por qué columnas separadas y no un flag:** con un flag, cualquier `SUM()` que
+olvide filtrar mezcla estimación con facturación real y el número queda mal sin
+que nadie lo note. Con columnas distintas, mezclarlas requiere hacerlo a propósito.
+
+**El valor estimado del v1** se calcula como `ventas × ticket de referencia`, donde
+el ticket es la **mediana** de las ventas reales del CRM — no el promedio. Hay una
+venta de $1,5M que infla el promedio un 13%; la mediana es más honesta.
+
+Ese número sirve para **dimensionar y comparar versiones**, nunca para reportar
+facturación. Los KPIs de plata usan solo `metodologia = 'v2_confirmado'`.
+
+La consulta **(H1)** de `05_historico_v1.sql` compara ambas versiones normalizadas
+por semana — que es la comparación justa, porque el v1 duró 16 semanas y el v2
+recién arranca.
 
 ## Notas de diseño
 
