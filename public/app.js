@@ -44,9 +44,16 @@ async function cargarDeApi() {
       consulta_comercial:   +i.consulta_comercial || 0,
       tasa_resolucion_pct:  +i.tasa_resolucion_pct || 0,
       score_promedio:       +i.score_promedio || 0,
-      // Ventas confirmadas por CRM; si el informe viene del Excel v1,
-      // el conteo estimado está en el payload.
-      ventas_rolo_v1: +i.ventas_web_confirmadas || +pay.ventas_estimadas_rolo_v1 || 0,
+      // Las dos metodologías van en campos SEPARADOS: mezclarlas en uno
+      // solo fue el bug que hacía desaparecer el histórico del v1.
+      ventas_confirmadas: +i.ventas_web_confirmadas || 0,   // v2: CRM, monto real
+      ventas_estimadas:   +i.ventas_estimadas_v1 || 0,      // v1: conteo por IA
+      monto_estimado:     +i.monto_estimado_v1 || 0,
+      // Campo unificado SOLO para graficar la serie histórica completa.
+      // Nunca se usa para KPIs de facturación.
+      ventas_rolo_v1: (+i.ventas_web_confirmadas || 0) + (+i.ventas_estimadas_v1 || 0),
+      metodologia: i.metodologia || 'v2_confirmado',
+      es_estimado: (i.metodologia || '') === 'v1_estimado',
       productos_top: pay.productos_top || [],
       problemas:     pay.problemas || [],
       _origen: pay.origen || 'tracking',
@@ -206,10 +213,29 @@ function renderKpisGestion() {
          delta: prev.length && pConvs ? deltaHtml(tasa, pWeb/pConvs*100, {pct:true}) : null}),
     kpi({lab:'Leads calificados', val:fmt(sum('lead_calificado')), accent:css('--s3'),
          sub:'con interés de compra'}),
-    kpi({lab:'Ventas de Rolo', val:fmt(sum('ventas_rolo_v1')), accent:css('--s1'),
-         sub:'atribuidas en el período',
-         delta: prev.length ? deltaHtml(sum('ventas_rolo_v1'), pSum('ventas_rolo_v1')) : null,
-         tip:'Ventas que el análisis semanal de la versión anterior de Rolo le atribuyó al agente.'}),
+    (() => {
+      // Se discriminan las dos épocas: confirmadas por CRM vs estimadas por IA.
+      const conf = sum('ventas_confirmadas'), est = sum('ventas_estimadas');
+      const hayEst = est > 0, hayConf = conf > 0;
+      let val, sub, pend = false;
+      if (hayConf && hayEst) {
+        val = `${fmt(conf)}<small> + ${fmt(est)} est.</small>`;
+        sub = 'confirmadas + estimadas (v1)';
+        pend = true;
+      } else if (hayEst) {
+        val = fmt(est);
+        sub = `estimadas · ${money(sum('monto_estimado'))}`;
+        pend = true;
+      } else {
+        val = fmt(conf);
+        sub = 'confirmadas por el CRM';
+      }
+      return kpi({lab:'Ventas de Rolo', val, sub, accent:css('--s1'), pending: pend,
+        delta: prev.length && hayConf ? deltaHtml(conf, pSum('ventas_confirmadas')) : null,
+        tip: hayEst
+          ? 'Las estimadas vienen del Rolo v1: conteo que hizo la IA leyendo conversaciones, sin monto real. Nunca se suman a la facturación.'
+          : 'Ventas confirmadas en el CRM y atribuidas a Rolo.'});
+    })(),
     kpi({lab:'Malas experiencias', val:fmt(sum('mala_experiencia')), accent:css('--bad'),
          sub:'a revisar'}),
     kpi({lab:'Score de atención', val:dec2(score)+'<small>/5</small>',
@@ -274,8 +300,9 @@ function renderEvo() {
       <span class="sw" style="background:${x.color};${x.tipo==='line'?'height:3px;width:16px;border-radius:999px':''}"></span>${esc(x.lab)}
     </button>`).join('');
   if (s.some(d => num(d.ventas_rolo_v1) > 0)) {
+    const soloEst = s.every(d => num(d.ventas_rolo_v1) === 0 || d.es_estimado);
     leg.insertAdjacentHTML('beforeend',
-      `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Ventas de Rolo (escala propia)</span>`);
+      `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Ventas de Rolo${soloEst ? ' — estimadas (v1)' : ''} · escala propia</span>`);
   }
   leg.querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.serie;
@@ -342,7 +369,9 @@ function renderEvo() {
 
     const lb = el('text',{ x:m.l, y:vBase-8, fill:css('--ink-3') });
     lb.setAttribute('style','font-size:10.5px;letter-spacing:.06em;text-transform:uppercase');
-    lb.textContent = 'Ventas atribuidas a Rolo';
+    lb.textContent = s.every(d => num(d[VENTAS_SERIE.k]) === 0 || d.es_estimado)
+      ? 'Ventas atribuidas a Rolo (estimadas · v1)'
+      : 'Ventas atribuidas a Rolo';
     svg.appendChild(lb);
 
     svg.appendChild(el('line',{ class:'gridline', x1:m.l, x2:W-m.r, y1:vBase+vh, y2:vBase+vh }));
@@ -586,7 +615,7 @@ function renderTablaSem() {
       <td class="n"><span class="bar-mini">
         <span class="track"><span class="fill" style="width:${Math.min(100,t)}%;background:${css('--s2')}"></span></span>
         <b>${dec1(t)}%</b></span></td>
-      <td class="n" style="${num(d.ventas_rolo_v1)>0?`color:${css('--s1')};font-weight:700`:'color:var(--ink-3)'}">${fmt(d.ventas_rolo_v1)}</td>
+      <td class="n" style="${num(d.ventas_rolo_v1)>0?`color:${css('--s1')};font-weight:700`:'color:var(--ink-3)'}">${fmt(d.ventas_rolo_v1)}${d.es_estimado&&num(d.ventas_rolo_v1)>0?'<span title="Estimado por IA (Rolo v1), sin monto real" style="color:var(--warn);font-weight:400"> est.</span>':''}</td>
       <td class="n">${fmt(d.lead_calificado)}</td>
       <td class="n" style="${num(d.mala_experiencia)>0?`color:${css('--bad')};font-weight:700`:''}">${fmt(d.mala_experiencia)}</td>
       <td class="n">${dec2(d.score_promedio)}</td>
@@ -817,8 +846,13 @@ function renderTablaVta() {
 function renderAvisos() {
   const box = document.getElementById('avisos');
   const bits = [];
+  const hayEstimadas = (D.semanas_historico || []).some(x => x.es_estimado);
+
   if (D.rolo_operativo === false) {
     bits.push(`<b>Rolo todavía no está operativo.</b> Las ventas que ves son reales y vienen del CRM, pero ninguna está atribuida al agente aún. Cuando Rolo entre en operación, el panel empieza a separar qué ventas generó él.`);
+  }
+  if (hayEstimadas) {
+    bits.push(`El período <b>marzo–junio 2026</b> corresponde al <b>Rolo v1</b>: sus ventas son un conteo estimado por IA sobre las conversaciones, sin monto ni cliente reales. Se muestran aparte y <b>nunca se suman</b> a la facturación del CRM.`);
   }
   if ((D.tasas_corregidas||[]).length) {
     const n = D.tasas_corregidas.length;
