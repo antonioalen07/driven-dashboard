@@ -55,6 +55,7 @@ async function cargarDeApi() {
       ventas_rolo_v1: (+i.ventas_web_confirmadas || 0) + (+i.ventas_estimadas_v1 || 0),
       metodologia: i.metodologia || 'v2_confirmado',
       es_estimado: (i.metodologia || '') === 'v1_estimado',
+      informe_narrativo: i.informe_narrativo || '',
       productos_top: pay.productos_top || [],
       problemas:     pay.problemas || [],
       _origen: pay.origen || 'tracking',
@@ -164,6 +165,8 @@ function etiquetaPeriodo() {
   if (FILTRO.modo === 'todos')  return 'Todo el período';
   if (FILTRO.modo === 'mes')    return mLab(FILTRO.mes).replace(/^./, c => c.toUpperCase());
   if (FILTRO.modo === 'dia')    return dLong(FILTRO.dia).replace(/^./, c => c.toUpperCase());
+  if (FILTRO.modo === 'semana' && FILTRO.desde)
+    return `Semana del ${dLab(FILTRO.desde)} al ${dLab(FILTRO.hasta)}`;
   const d = FILTRO.desde ? dLab(FILTRO.desde) : '…';
   const h = FILTRO.hasta ? dLab(FILTRO.hasta) : '…';
   return `${d} — ${h}`;
@@ -978,6 +981,43 @@ function renderTablaVta() {
 }
 
 /* ============================================================
+   Narrativa de la IA
+   ------------------------------------------------------------
+   El flujo guarda un informe en prosa por día. Es lo único que
+   explica el POR QUÉ detrás de los números, pero es texto largo:
+   va en la columna angosta, debajo del gráfico, y colapsado
+   cuando hay más de un día en el rango.
+   ============================================================ */
+function renderNarrativa() {
+  const box = document.getElementById('narrativa');
+  if (!box) return;
+
+  // Solo los días que realmente tienen texto. El v1 no dejó narrativa.
+  const dias = semanas()
+    .filter(d => (d.informe_narrativo || '').trim())
+    .sort((a,b) => day(b.fecha) - day(a.fecha));
+
+  if (!dias.length) { box.innerHTML = ''; return; }
+
+  const item = (d, abierto) => `
+    <details class="narr" ${abierto ? 'open' : ''}>
+      <summary>
+        <span class="f">${dLab(d.fecha)}</span>
+        <span class="p">${esc((d.informe_narrativo || '').slice(0, 60))}${(d.informe_narrativo||'').length > 60 ? '…' : ''}</span>
+      </summary>
+      <p>${esc(d.informe_narrativo)}</p>
+    </details>`;
+
+  // Un solo día: se muestra abierto, no tiene sentido esconderlo.
+  box.innerHTML = `
+    <div class="narr-box">
+      <p class="narr-tit">Lectura del día${dias.length > 1 ? 's' : ''} · IA</p>
+      ${dias.slice(0, 30).map(d => item(d, dias.length === 1)).join('')}
+      ${dias.length > 30 ? `<p class="narr-mas">+${dias.length - 30} días más en el período</p>` : ''}
+    </div>`;
+}
+
+/* ============================================================
    Avisos
    ============================================================ */
 function renderAvisos() {
@@ -1061,7 +1101,7 @@ function render() {
   document.getElementById('v-gestion').hidden = VIEW !== 'gestion';
   document.getElementById('v-ventas').hidden  = VIEW !== 'ventas';
   if (VIEW === 'gestion') {
-    renderKpisGestion(); renderEvo(); renderMix(); renderTasa();
+    renderKpisGestion(); renderEvo(); renderMix(); renderTasa(); renderNarrativa();
     listaFrec('prods','productos_top', css('--s4'), true);
     listaFrec('probs','problemas',     css('--s1'), false);
     renderTablaSem();
@@ -1087,6 +1127,7 @@ async function init() {
   const elModo = document.getElementById('fModo');
   const elMes  = document.getElementById('fMes');
   const elDia  = document.getElementById('fDia');
+  const elSem  = document.getElementById('fSemana');
   const elRango= document.getElementById('fRango');
   const elDesde= document.getElementById('fDesde');
   const elHasta= document.getElementById('fHasta');
@@ -1113,6 +1154,7 @@ async function init() {
       elm.style.display = on ? (disp || '') : 'none';
     };
     ver(elMes,   modo === 'mes');
+    ver(elSem,   modo === 'semana');
     ver(elDia,   modo === 'dia');
     ver(elRango, modo === 'custom', 'inline-flex');
 
@@ -1127,6 +1169,24 @@ async function init() {
       FILTRO = { modo, mes:m, dia:null,
                  desde:`${m}-01`,
                  hasta:`${fin.getFullYear()}-${p(fin.getMonth()+1)}-${p(fin.getDate())}` };
+    } else if (modo === 'semana') {
+      // <input type="week"> devuelve "2026-W34" (semana ISO, empieza lunes).
+      const w = elSem.value;
+      if (!w) { FILTRO = { modo, desde:null, hasta:null, mes:null, dia:null, semana:null }; }
+      else {
+        const [y, ns] = w.split('-W').map(Number);
+        // Semana ISO 1 = la que contiene el 4 de enero.
+        const ene4 = new Date(y, 0, 4);
+        const lunSem1 = new Date(ene4);
+        lunSem1.setDate(ene4.getDate() - ((ene4.getDay() + 6) % 7));
+        const lun = new Date(lunSem1);
+        lun.setDate(lunSem1.getDate() + (ns - 1) * 7);
+        const dom = new Date(lun);
+        dom.setDate(lun.getDate() + 6);
+        const p = n => String(n).padStart(2,'0');
+        const iso = d => `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+        FILTRO = { modo, semana:w, mes:null, dia:null, desde:iso(lun), hasta:iso(dom) };
+      }
     } else if (modo === 'dia') {
       const d = elDia.value;
       FILTRO = { modo, dia:d, mes:null, desde:d, hasta:d };
@@ -1137,7 +1197,7 @@ async function init() {
     }
     render();
   }
-  [elModo, elMes, elDia, elDesde, elHasta].forEach(i => i.onchange = aplicarFiltro);
+  [elModo, elMes, elSem, elDia, elDesde, elHasta].forEach(i => i.onchange = aplicarFiltro);
   aplicarFiltro();
 
   document.querySelectorAll('.seg button[data-view]').forEach(b => b.onclick = () => {

@@ -27,12 +27,16 @@
       <select class="btn" id="fModo" aria-label="Tipo de período">
         <option value="todos">Todo el período</option>
         <option value="mes">Por mes</option>
+        <option value="semana">Por semana</option>
         <option value="dia">Por día</option>
         <option value="custom">Personalizado</option>
       </select>
 
       <label class="sr" for="fMes">Mes</label>
       <select class="btn" id="fMes" aria-label="Mes" hidden></select>
+
+      <label class="sr" for="fSemana">Semana</label>
+      <input class="btn" type="week" id="fSemana" aria-label="Semana" hidden>
 
       <label class="sr" for="fDia">Día</label>
       <input class="btn" type="date" id="fDia" aria-label="Día" hidden>
@@ -85,6 +89,11 @@
         <h3>Desenlace de conversaciones</h3>
         <p class="hint">Acumulado del período.</p>
         <div class="chartbox" id="ch-mix"></div>
+
+        <!-- Lectura de la IA. Va acá, en la columna angosta y debajo del
+             gráfico: se encuentra si se busca, pero no le gana la atención
+             a los números. Colapsable porque en rangos largos son varios días. -->
+        <div id="narrativa"></div>
       </div>
     </div>
 
