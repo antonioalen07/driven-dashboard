@@ -56,8 +56,12 @@ async function cargarDeApi() {
       metodologia: i.metodologia || 'v2_confirmado',
       es_estimado: (i.metodologia || '') === 'v1_estimado',
       informe_narrativo: i.informe_narrativo || '',
-      productos_top: pay.productos_top || [],
-      problemas:     pay.problemas || [],
+      // Las dos épocas nombran estos campos distinto:
+      //   v1 -> payload.productos_top / payload.problemas
+      //   v2 -> payload.resumen.productos_mas_consultados / .principales_problemas
+      // Se aceptan ambos para que las tarjetas funcionen con cualquiera.
+      productos_top: pay.productos_top || pay.resumen?.productos_mas_consultados || [],
+      problemas:     pay.problemas     || pay.resumen?.principales_problemas     || [],
       _origen: pay.origen || 'tracking',
     };
   });
