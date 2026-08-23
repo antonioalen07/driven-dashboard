@@ -325,13 +325,21 @@ td.n .bar-mini { justify-content: flex-end; }
 .bar-mini .fill { height: 100%; border-radius: 999px; }
 
 /* ---------------- avisos ---------------- */
+/* Notas metodológicas al pie. Antes eran un banner ámbar arriba de todo:
+   explican CÓMO se cuenta, no avisan de un problema, así que competían con
+   los números por la atención. Acá quedan discretas y consultables. */
 .notice {
   display: flex; gap: 11px; align-items: flex-start;
-  background: color-mix(in srgb, var(--warn) 9%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
-  border-radius: var(--r-lg); padding: 13px 15px; margin-bottom: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg); padding: 15px 17px;
+  margin-top: var(--sp-5);
 }
-.notice svg { width: 17px; height: 17px; color: var(--warn); flex: none; margin-top: 1px; }
+.notice svg { width: 17px; height: 17px; color: var(--ink-3); flex: none; margin-top: 1px; }
+.notice .titulo {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 7px;
+}
 .notice p { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
 .notice p + p { margin-top: 4px; }
 .notice b { color: var(--ink); }

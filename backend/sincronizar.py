@@ -24,7 +24,7 @@ GHL_TOKEN    = os.environ.get("GHL_TOKEN", "").strip()
 
 # Desde acá el conteo es real: TiendaNube carga las ventas en GHL.
 # Lo anterior son cargas manuales sueltas: se conservan, no computan.
-INICIO_TRACKING = os.environ.get("INICIO_TRACKING", "2026-08-01")
+INICIO_TRACKING = os.environ.get("INICIO_TRACKING", "2026-08-15")
 GHL_LOCATION = os.environ.get("GHL_LOCATION_ID", "BMHsoyIJ3WBb6yfmh2LY")
 GHL_PIPELINE = os.environ.get("GHL_PIPELINE_ID", "NbShXQHetl9uBaPOYt3N")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")

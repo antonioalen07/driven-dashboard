@@ -42,11 +42,15 @@ Cada venta cae en **uno y solo uno**, y los tres suman el total:
 Antes había solo dos ("Rolo" y "sin atribuir"), lo que metía en la misma bolsa una
 venta trabajada por un asesor y una compra que se hizo sola.
 
-### El corte del 1/8/2026
+### El corte del 15/8/2026
 
-El conteo real arranca cuando TiendaNube empezó a cargar cada venta en GHL. Las 7
-ventas anteriores (mar–may 2026) son cargas manuales sueltas, sin nº de orden: se
-conservan como registro (`computa = false`) pero **no entran en ningún KPI**.
+El conteo real arranca el **15/8/2026**, cuando TiendaNube empezó a cargar cada venta
+en GHL. Las 7 ventas anteriores (mar–may 2026) son cargas manuales sueltas, sin nº de
+orden: se conservan como registro (`computa = false`) pero **no entran en ningún KPI**.
+
+**Rolo entra en operación el 24/8/2026.** Antes de esa fecha, 0 % de atribución es el
+resultado correcto: el agente estaba apagado. Los dos parámetros se pueden mover con
+las variables `INICIO_TRACKING` e `INICIO_ROLO`.
 
 **Filtros de período** en toda la aplicación:
 - **Todo el período** — el histórico completo
@@ -123,7 +127,8 @@ En el SQL Editor, ejecutar en orden:
 1. `tracking-diario/02_tabla_informes.sql` — resumen diario (quizá ya lo hiciste)
 2. `tracking-diario/04_tabla_ventas.sql` — histórico de ventas + vista
 3. `tracking-diario/05_historico_v1.sql` — columnas para separar el histórico v1
-4. `tracking-diario/06_canales_y_corte.sql` — canal (rolo/asesor/web) + corte del 1/8
+4. `tracking-diario/06_canales_y_corte.sql` — canal (rolo/asesor/web) + corte
+5. `tracking-diario/07_corte_15_agosto.sql` — mueve el corte al 15/8 (ya aplicado)
 
 ### 2. Cargar los datos
 ```bash

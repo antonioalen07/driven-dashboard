@@ -13,9 +13,12 @@ nunca ve credenciales: todas las consultas pasan por acá.
     GET /api/versiones                      compara Rolo v1 vs v2 (normalizado por semana)
     GET /api/canales?desde=&hasta=          desglose por canal (rolo/asesor/web directa)
 
-El tracking formal arranca el 2026-08-01 (INICIO_TRACKING): cuando TiendaNube
+El tracking formal arranca el 2026-08-15 (INICIO_TRACKING): cuando TiendaNube
 empieza a cargar las ventas en GHL. Lo anterior son cargas manuales sueltas que
 se conservan como registro (computa = false) pero no entran en ningún KPI.
+
+Rolo entra en operación el 2026-08-24 (INICIO_ROLO): antes de esa fecha el 0 %
+de atribución es lo esperado, no un problema de medición.
 
 Variables de entorno (todas del lado del servidor):
     SUPABASE_URL        https://xxxx.supabase.co
@@ -41,7 +44,11 @@ ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Fecha desde la que el conteo es real: TiendaNube carga las ventas en GHL.
 # Antes de esto solo hay cargas manuales sueltas, sin nº de orden.
-INICIO_TRACKING = os.environ.get("INICIO_TRACKING", "2026-08-01")
+INICIO_TRACKING = os.environ.get("INICIO_TRACKING", "2026-08-15")
+
+# Día en que Rolo entra en operación. Antes de esto la atribución en 0 % es
+# el resultado correcto: el agente estaba apagado, no falló la medición.
+INICIO_ROLO = os.environ.get("INICIO_ROLO", "2026-08-24")
 
 
 class ErrorSupabase(Exception):
@@ -365,6 +372,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.responder({
                     "desde": desde, "hasta": hasta,
                     "inicio_tracking": INICIO_TRACKING,
+                    "inicio_rolo": INICIO_ROLO,
                     "total": {"ventas": t["ventas"], "monto": t["monto"], "ticket": t["ticket"]},
                     "canales": canales,
                     "fuera_de_periodo": fuera,
@@ -392,6 +400,7 @@ class Handler(BaseHTTPRequestHandler):
                     "desde": desde, "hasta": hasta,
                     "ventas": tv, "gestion": tg, "previo": previo,
                     "inicio_tracking": INICIO_TRACKING,
+                    "inicio_rolo": INICIO_ROLO,
                     "fuera_de_periodo": fuera,
                     "cobertura": {"desde": lim[0]["fecha"] if lim else None,
                                   "hasta": lim[-1]["fecha"] if lim else None},

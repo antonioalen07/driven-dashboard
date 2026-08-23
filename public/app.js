@@ -80,13 +80,14 @@ async function cargarDeApi() {
 
   // Registro previo al inicio del tracking: existe, se muestra como nota,
   // pero no entra en ningún KPI. Si el endpoint no está, el panel sigue.
-  let fueraDePeriodo = null, inicioTracking = null;
+  let fueraDePeriodo = null, inicioTracking = null, inicioRolo = null;
   try {
     const rc = await fetch('/api/canales');
     if (rc.ok) {
       const c = await rc.json();
       fueraDePeriodo = c.fuera_de_periodo || null;
       inicioTracking = c.inicio_tracking || null;
+      inicioRolo     = c.inicio_rolo || null;
     }
   } catch (e) { /* opcional: el resto del panel no depende de esto */ }
 
@@ -97,6 +98,7 @@ async function cargarDeApi() {
     tasas_corregidas: [],
     fuera_de_periodo: fueraDePeriodo,
     inicio_tracking: inicioTracking,
+    inicio_rolo: inicioRolo,
     rolo_operativo: dias.some(d => d.ventas_atribuidas_rolo > 0),
   };
 }
@@ -983,7 +985,8 @@ function renderAvisos() {
   const bits = [];
   const hayEstimadas = (D.semanas_historico || []).some(x => x.es_estimado);
 
-  const ini = D.inicio_tracking || '2026-08-01';
+  const ini = D.inicio_tracking || '2026-08-15';
+  const iniRolo = D.inicio_rolo || '2026-08-24';
   const iniLab = dLong(ini);
 
   // El corte va primero: define qué significan todos los números de abajo.
@@ -995,7 +998,12 @@ function renderAvisos() {
   }
 
   if (D.rolo_operativo === false) {
-    bits.push(`<b>Rolo todavía no está operativo.</b> Las ventas que ves son reales y vienen del CRM, pero ninguna está atribuida al agente aún. Cuando Rolo entre en operación, el panel empieza a separar qué ventas generó él.`);
+    // Se nombra la fecha de arranque: sin eso, "0% atribuido" se lee como
+    // que el agente no funciona, cuando en realidad todavía no encendió.
+    const hoy = new Date().toISOString().slice(0,10);
+    bits.push(hoy < iniRolo
+      ? `<b>Rolo entra en operación el ${dLong(iniRolo)}.</b> Hasta esa fecha la atribución en 0 % es lo esperado: el agente todavía no está encendido. Las ventas que ves son reales y vienen del CRM.`
+      : `<b>Rolo arrancó el ${dLong(iniRolo)}</b>, pero todavía no hay ventas atribuidas. Puede ser normal los primeros días: la atribución necesita que el cliente compre después de que Rolo lo asesore.`);
   }
   if (hayEstimadas) {
     bits.push(`El período <b>marzo–junio 2026</b> corresponde al <b>Rolo v1</b> — una versión <b>deprecada</b> del agente. Sus ventas son un conteo estimado por IA sobre las conversaciones, sin monto ni cliente reales. Se conservan solo para comparar contra el v2 y <b>nunca se suman</b> a la facturación.`);
@@ -1007,7 +1015,10 @@ function renderAvisos() {
   box.innerHTML = bits.length ? `<div class="notice">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5"/></svg>
-    <div>${bits.map(b => `<p>${b}</p>`).join('')}</div></div>` : '';
+    <div style="flex:1">
+      <p class="titulo">Cómo se cuenta</p>
+      ${bits.map(b => `<p>${b}</p>`).join('')}
+    </div></div>` : '';
 }
 
 /* ============================================================
