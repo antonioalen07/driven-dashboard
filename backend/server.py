@@ -27,7 +27,7 @@ Variables de entorno (todas del lado del servidor):
 
 Sin dependencias externas: solo la stdlib de Python.
 """
-import os, json, urllib.request, urllib.parse, urllib.error, datetime, re
+import os, json, urllib.request, urllib.parse, urllib.error, datetime, re, hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -291,11 +291,26 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404, "No encontrado")
             return
         datos = destino.read_bytes()
+        # ETag por contenido: el navegador revalida en cada carga y solo baja
+        # el archivo si cambió. Antes app.js/styles.css iban con max-age=3600,
+        # así que después de un deploy el panel seguía corriendo el JS viejo
+        # durante una hora — el HTML nuevo con el JS anterior.
+        etag = '"%s"' % hashlib.md5(datos).hexdigest()[:16]
+
+        # 304: el archivo no cambió. Se responde sin cuerpo y se corta acá,
+        # antes de escribir ninguna otra línea de estado.
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            return
+
         self.send_response(200)
         self.send_header("Content-Type", MIME.get(destino.suffix, "application/octet-stream"))
         self.send_header("Content-Length", str(len(datos)))
-        self.send_header("Cache-Control",
-                         "no-store" if destino.suffix in (".html", ".json") else "max-age=3600")
+        self.send_header("ETag", etag)
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(datos)
 

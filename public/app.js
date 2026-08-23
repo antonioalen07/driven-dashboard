@@ -147,17 +147,22 @@ function enRango(fecha) {
 }
 /* Una semana del histórico cubre 7 días: entra si su ventana se solapa
    con el período, no solo si su fecha de inicio cae adentro. */
-function semanaEnRango(fechaIni) {
+/* Una fila entra en el rango si su período se solapa con el filtro.
+   El "largo" de la fila depende de su granularidad: las del v1 son
+   SEMANALES (cubren 7 días desde su fecha) y las del v2 son DIARIAS.
+   Tratar a todas como semanales hacía que un informe diario apareciera
+   en filtros de días que no le corresponden. */
+function semanaEnRango(fechaIni, esSemanal) {
   if (FILTRO.modo === 'todos') return true;
   const ini = String(fechaIni).slice(0,10);
-  const d = day(ini); d.setDate(d.getDate() + 6);
+  const d = day(ini); d.setDate(d.getDate() + (esSemanal ? 6 : 0));
   const p = n => String(n).padStart(2,'0');
   const fin = `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
   if (FILTRO.hasta && ini > FILTRO.hasta) return false;
   if (FILTRO.desde && fin < FILTRO.desde) return false;
   return true;
 }
-const semanas = () => D.semanas_historico.filter(s => semanaEnRango(s.fecha));
+const semanas = () => D.semanas_historico.filter(s => semanaEnRango(s.fecha, s.es_estimado));
 const dias    = () => D.dias_ventas.filter(d => enRango(d.fecha));
 
 /* Texto legible del período, para los subtítulos. */
