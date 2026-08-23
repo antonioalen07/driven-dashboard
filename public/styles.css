@@ -397,3 +397,7 @@ footer.ft b { color: var(--brand); }
   font-size: 13px; line-height: 1.65; color: var(--ink-2); white-space: pre-wrap;
 }
 .narr-mas { margin: 8px 0 0; font-size: 12px; color: var(--ink-3); }
+
+/* 'hidden' pierde contra el display de .grid/.card: se fuerza.
+   Lo usan los bloques de Gestión que solo tienen sentido con datos. */
+[hidden] { display: none !important; }

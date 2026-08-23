@@ -220,9 +220,36 @@ function deltaHtml(cur, prev, {pct=false, inverse=false} = {}) {
   return `<span class="${good?'up':'down'}">${txt}</span> <span class="flat">vs anterior</span>`;
 }
 
+/* Explica POR QUÉ no hay informe de gestión en el período elegido.
+   "Sin datos" repetido cinco veces se lee como un panel roto; casi siempre
+   la razón es que el flujo todavía no analizó ese día (corre a la mañana
+   y analiza el día anterior). */
+function motivoSinGestion() {
+  const hoy = new Date().toISOString().slice(0,10);
+  const p = n => String(n).padStart(2,'0');
+  const ayerD = new Date(); ayerD.setDate(ayerD.getDate() - 1);
+  const ayer = `${ayerD.getFullYear()}-${p(ayerD.getMonth()+1)}-${p(ayerD.getDate())}`;
+
+  // ¿El rango pedido es hoy (o el futuro)? Todavía no puede haber informe.
+  if (FILTRO.desde && FILTRO.desde >= hoy) {
+    return `El informe de gestión de <b>hoy</b> se genera mañana a la mañana: el flujo analiza siempre el día anterior. Para ver el último disponible, elegí <b>${dLab(ayer)}</b> o "Todo el período".`;
+  }
+  // Hay ventas ese día pero no informe: el flujo no corrió para esa fecha.
+  const hayVentas = (D.dias_ventas || []).some(d => enRango(d.fecha) && num(d.ventas_confirmadas) > 0);
+  if (hayVentas) {
+    return `No hay informe de conversaciones para este período, pero <b>sí hay ventas registradas</b> — mirálas en la pestaña <b>Ventas</b>. El informe de gestión se genera una vez por día, a la mañana siguiente.`;
+  }
+  return 'Sin conversaciones registradas en este período.';
+}
+
 function renderKpisGestion() {
   const s = semanas(), box = document.getElementById('kpis-gestion');
-  if (!s.length) { box.innerHTML = `<div class="card" style="grid-column:1/-1"><p class="empty">Sin datos de conversaciones para este período.</p></div>`;
+  // Sin informe: un solo mensaje que explica por qué, en vez de cinco
+  // tarjetas repitiendo "Sin datos" (que se lee como panel roto).
+  document.querySelectorAll('#v-gestion .solo-con-datos')
+    .forEach(el => { el.hidden = !s.length; });
+
+  if (!s.length) { box.innerHTML = `<div class="card" style="grid-column:1/-1"><p class="empty">${motivoSinGestion()}</p></div>`;
     document.getElementById('sub-gestion').textContent = '—'; return; }
 
   const sum = k => s.reduce((a,x) => a + num(x[k]), 0);
