@@ -243,7 +243,7 @@ def comparar_versiones():
         valor  = g["monto_confirmado"] + g["monto_estimado"]
         salida.append({
             "metodologia": met,
-            "etiqueta": "Rolo v1 (estimado)" if met == "v1_estimado" else "Rolo v2 (confirmado)",
+            "etiqueta": "IA v1 (estimado)" if met == "v1_estimado" else "IA v2 (confirmado)",
             "es_estimado": met == "v1_estimado",
             "desde": fechas[0], "hasta": fechas[-1],
             "semanas": round(semanas, 1),
@@ -370,7 +370,7 @@ class Handler(BaseHTTPRequestHandler):
                 # en el mismo lugar, para que nadie los sume por accidente.
                 t = totales_ventas(desde, hasta)
                 canales = [
-                    {"canal": "rolo", "etiqueta": "Rolo (agente IA)",
+                    {"canal": "rolo", "etiqueta": "IA de Driven",
                      "ventas": t["ventas_rolo"], "monto": t["monto_rolo"],
                      "pct": t["pct_atribucion"], "ticket": t["ticket_rolo"]},
                     {"canal": "asesor", "etiqueta": "Asesores",

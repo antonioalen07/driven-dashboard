@@ -296,11 +296,11 @@ function renderKpisGestion() {
         val = fmt(conf);
         sub = 'confirmadas por el CRM';
       }
-      return kpi({lab:'Ventas de Rolo', val, sub, accent:css('--s1'), pending: pend,
+      return kpi({lab:'Ventas de la IA', val, sub, accent:css('--s1'), pending: pend,
         delta: prev.length && hayConf ? deltaHtml(conf, pSum('ventas_confirmadas')) : null,
         tip: hayEst
-          ? 'Las estimadas vienen del Rolo v1: conteo que hizo la IA leyendo conversaciones, sin monto real. Nunca se suman a la facturación.'
-          : 'Ventas confirmadas en el CRM y atribuidas a Rolo.'});
+          ? 'Las estimadas vienen de la IA v1: conteo que hizo la IA leyendo conversaciones, sin monto real. Nunca se suman a la facturación.'
+          : 'Ventas confirmadas en el CRM y atribuidas a la IA.'});
     })(),
     kpi({lab:'Malas experiencias', val:fmt(sum('mala_experiencia')), accent:css('--bad'),
          sub:'a revisar'}),
@@ -336,16 +336,16 @@ function renderKpisVentas() {
     kpi({lab:'Facturación total', val:money(monto), accent:css('--s4'),
          sub:`${fmt(n)} venta${n!==1?'s':''} de la tienda`,
          tip:'Todas las ventas ganadas en el CRM en el período. Es la suma de los tres canales.'}),
-    kpi({lab:'Ventas de Rolo', val:money(montoAtr), accent:css('--s1'),
+    kpi({lab:'Ventas de la IA', val:money(montoAtr), accent:css('--s1'),
          sub:`${fmt(atr)} venta${atr!==1?'s':''} · ${dec1(pct(montoAtr))}% del total`,
          pending: atr === 0,
-         tip:'Rolo asesoró (mandó link o buscó productos) antes de la compra, dentro de la ventana de 7 días.'}),
+         tip:'La IA asesoró (mandó link o buscó productos) antes de la compra, dentro de la ventana de 7 días.'}),
     kpi({lab:'Ventas de asesores', val:money(montoAse), accent:css('--s3'),
          sub:`${fmt(ase)} venta${ase!==1?'s':''} · ${dec1(pct(montoAse))}% del total`,
          tip:'Cerradas por una persona del equipo: ganadas en el CRM sin origen TiendaNube.'}),
     kpi({lab:'Web directa', val:money(montoWeb), accent:css('--s5'),
          sub:`${fmt(web)} venta${web!==1?'s':''} · ${dec1(pct(montoWeb))}% del total`,
-         tip:'El cliente compró solo en la tienda, sin que Rolo ni un asesor intervinieran.'}),
+         tip:'El cliente compró solo en la tienda, sin que la IA ni un asesor intervinieran.'}),
     kpi({lab:'Ticket promedio', val:money(ticket), sub:'por venta del período'}),
     kpi({lab:'Días con ventas', val:fmt(v.length), sub:'en el período'}),
   ].join('');
@@ -371,7 +371,7 @@ function renderEvo() {
   // Las ventas van en su propio panel debajo: su escala (1-18) es tan chica
   // frente a las conversaciones (60-180) que en el mismo eje serian una
   // linea plana pegada al piso. Dos escalas en un plot enganan; dos plots no.
-  const VENTAS_SERIE = { k:'ventas_rolo_v1', lab:'Ventas de Rolo', color: css('--s1') };
+  const VENTAS_SERIE = { k:'ventas_rolo_v1', lab:'Ventas de la IA', color: css('--s1') };
   leg.innerHTML = SER.map(x => `
     <button class="it" data-serie="${x.k}" aria-pressed="${!OCULTAS.has(x.k)}">
       <span class="sw" style="background:${x.color};${x.tipo==='line'?'height:3px;width:16px;border-radius:999px':''}"></span>${esc(x.lab)}
@@ -379,7 +379,7 @@ function renderEvo() {
   if (s.some(d => num(d.ventas_rolo_v1) > 0)) {
     const soloEst = s.every(d => num(d.ventas_rolo_v1) === 0 || d.es_estimado);
     leg.insertAdjacentHTML('beforeend',
-      `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Ventas de Rolo${soloEst ? ' — estimadas (v1)' : ''} · escala propia</span>`);
+      `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Ventas de la IA${soloEst ? ' — estimadas (v1)' : ''} · escala propia</span>`);
   }
   leg.querySelectorAll('button').forEach(b => b.onclick = () => {
     const k = b.dataset.serie;
@@ -447,8 +447,8 @@ function renderEvo() {
     const lb = el('text',{ x:m.l, y:vBase-8, fill:css('--ink-3') });
     lb.setAttribute('style','font-size:10.5px;letter-spacing:.06em;text-transform:uppercase');
     lb.textContent = s.every(d => num(d[VENTAS_SERIE.k]) === 0 || d.es_estimado)
-      ? 'Ventas atribuidas a Rolo (estimadas · v1)'
-      : 'Ventas atribuidas a Rolo';
+      ? 'Ventas atribuidas a la IA (estimadas · v1)'
+      : 'Ventas atribuidas a la IA';
     svg.appendChild(lb);
 
     svg.appendChild(el('line',{ class:'gridline', x1:m.l, x2:W-m.r, y1:vBase+vh, y2:vBase+vh }));
@@ -479,7 +479,7 @@ function renderEvo() {
         tipRow(css('--ink-3'),'Conversaciones', fmt(d.total_conversaciones))+
         tipRow(null,'Tasa', dec1(d.tasa_resolucion_pct)+'%')+
         tipRow(css('--s3'),'Leads', fmt(d.lead_calificado))+
-        tipRow(css('--s1'),'Ventas de Rolo', fmt(d.ventas_rolo_v1)),
+        tipRow(css('--s1'),'Ventas de la IA', fmt(d.ventas_rolo_v1)),
         cx(i)*sc, y(Math.max(num(d.total_conversaciones), num(d.enviado_a_web)))*sc);
     });
     hz.addEventListener('mouseleave', () => { tip.hide(); cross.style.opacity=0; });
@@ -760,7 +760,7 @@ function renderTablaSem() {
       <td class="n"><span class="bar-mini">
         <span class="track"><span class="fill" style="width:${Math.min(100,t)}%;background:${css('--s2')}"></span></span>
         <b>${dec1(t)}%</b></span></td>
-      <td class="n" style="${num(d.ventas_rolo_v1)>0?`color:${css('--s1')};font-weight:700`:'color:var(--ink-3)'}">${fmt(d.ventas_rolo_v1)}${d.es_estimado&&num(d.ventas_rolo_v1)>0?'<span title="Estimado por IA (Rolo v1), sin monto real" style="color:var(--warn);font-weight:400"> est.</span>':''}</td>
+      <td class="n" style="${num(d.ventas_rolo_v1)>0?`color:${css('--s1')};font-weight:700`:'color:var(--ink-3)'}">${fmt(d.ventas_rolo_v1)}${d.es_estimado&&num(d.ventas_rolo_v1)>0?'<span title="Estimado por IA (v1), sin monto real" style="color:var(--warn);font-weight:400"> est.</span>':''}</td>
       <td class="n">${fmt(d.lead_calificado)}</td>
       <td class="n" style="${num(d.mala_experiencia)>0?`color:${css('--bad')};font-weight:700`:''}">${fmt(d.mala_experiencia)}</td>
       <td class="n">${dec2(d.score_promedio)}</td>
@@ -780,7 +780,7 @@ function renderVentas() {
   if (!v.length) { box.innerHTML = '<p class="empty">Sin ventas en el período.</p>'; leg.innerHTML=''; return; }
 
   leg.innerHTML =
-    `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Atribuido a Rolo</span>
+    `<span class="it"><span class="sw" style="background:${css('--s1')}"></span>Atribuido a la IA</span>
      <span class="it"><span class="sw" style="background:${css('--s5')}"></span>Sin atribuir</span>`;
 
   const W = 760, H = 280, m = { t:16, r:16, b:38, l:56 };
@@ -791,7 +791,7 @@ function renderVentas() {
   const y  = n => m.t + ih - (num(n)/top)*ih;
 
   const svg = el('svg',{ class:'chart', viewBox:`0 0 ${W} ${H}`, role:'img',
-    'aria-label':'Facturación por día, separada entre atribuida a Rolo y sin atribuir.' });
+    'aria-label':'Facturación por día, separada entre atribuida a la IA y sin atribuir.' });
 
   for (let i=0;i<=4;i++) {
     const val = top/4*i, yy = y(val);
@@ -843,7 +843,7 @@ function renderVentas() {
       tip.show(`<div class="tt">${dLong(d.fecha)}</div>`+
         tipRow(null,'Facturación', moneyFull(d.monto))+
         tipRow(null,'Ventas', fmt(d.ventas_confirmadas))+
-        tipRow(css('--s1'),'De Rolo', d.ventas_atribuidas_rolo ? moneyFull(d.monto_atribuido) : '—')+
+        tipRow(css('--s1'),'De la IA', d.ventas_atribuidas_rolo ? moneyFull(d.monto_atribuido) : '—')+
         tipRow(css('--s5'),'Sin atribuir', moneyFull(d.monto_no_atribuible)),
         cx(i)*sc, y(d.monto)*sc);
     });
@@ -871,7 +871,7 @@ function renderTorta() {
   // para que los tres canales siempre cierren exactamente en el total.
   const web = Math.max(0, tot - atr - ase);
   const partes = [
-    { lab:'Rolo (agente IA)', v:atr, c:css('--s1') },
+    { lab:'IA de Driven', v:atr, c:css('--s1') },
     { lab:'Asesores',         v:ase, c:css('--s3') },
     { lab:'Web directa',      v:web, c:css('--s5') },
   ].filter(p => p.v > 0);
@@ -884,7 +884,7 @@ function renderTorta() {
       <div style="text-align:center;padding:22px 8px 6px">
         <div style="font-family:Oswald,sans-serif;font-size:38px;font-weight:600;color:var(--ink-3);line-height:1">0%</div>
         <p style="margin:10px auto 0;max-width:34ch;font-size:13.5px;color:var(--ink-3);line-height:1.6">
-          Ninguna venta está atribuida todavía porque <b style="color:var(--ink-2)">Rolo aún no está operativo</b>.
+          Ninguna venta está atribuida todavía porque <b style="color:var(--ink-2)">la IA aún no está operativa</b>.
           Cuando entre en operación, acá vas a ver qué porcentaje de la facturación generó el agente.
         </p>
       </div>`;
@@ -905,7 +905,7 @@ function renderTorta() {
 
   const W = 300, H = 210, cx = W/2, cy = H/2, R = 78, r = 50;
   const svg = el('svg',{ class:'chart', viewBox:`0 0 ${W} ${H}`, role:'img',
-    'aria-label':`Atribución: ${dec1(atr/tot*100)} por ciento de la facturación es de Rolo.` });
+    'aria-label':`Atribución: ${dec1(atr/tot*100)} por ciento de la facturación es de la IA.` });
   const tip = tipFor(box);
 
   let ang = -Math.PI/2;
@@ -938,7 +938,7 @@ function renderTorta() {
   t1.textContent = dec1(pct)+'%';
   const t2 = el('text',{ x:cx, y:cy+16, 'text-anchor':'middle' });
   t2.setAttribute('style','font-size:11px;letter-spacing:.08em;text-transform:uppercase');
-  t2.textContent = 'de Rolo';
+  t2.textContent = 'de la IA';
   svg.appendChild(t1); svg.appendChild(t2);
   box.appendChild(svg);
 
@@ -998,7 +998,7 @@ function renderTablaVta() {
   // Cada venta muestra su canal, no un binario. "Sin atribuir" mezclaba
   // dos cosas distintas: una venta que cerró un asesor y una compra sola.
   const CANAL = {
-    rolo:        { lab:'Rolo',        c:'--s1' },
+    rolo:        { lab:'IA',          c:'--s1' },
     asesor:      { lab:'Asesor',      c:'--s3' },
     web_directa: { lab:'Web directa', c:'--s5' },
   };
@@ -1066,7 +1066,7 @@ function renderAvisos() {
   const iniLab = dLong(ini);
 
   // El corte va primero: define qué significan todos los números de abajo.
-  bits.push(`El conteo de ventas arranca el <b>${iniLab}</b>, cuando la tienda empezó a cargar cada venta en el CRM. Desde ahí cada venta se clasifica en uno de tres canales: <b>Rolo</b>, <b>asesores</b> o <b>web directa</b>.`);
+  bits.push(`El conteo de ventas arranca el <b>${iniLab}</b>, cuando la tienda empezó a cargar cada venta en el CRM. Desde ahí cada venta se clasifica en uno de tres canales: <b>IA de Driven</b>, <b>asesores</b> o <b>web directa</b>.`);
 
   const fp = D.fuera_de_periodo;
   if (fp && +fp.ventas > 0) {
@@ -1078,11 +1078,11 @@ function renderAvisos() {
     // que el agente no funciona, cuando en realidad todavía no encendió.
     const hoy = new Date().toISOString().slice(0,10);
     bits.push(hoy < iniRolo
-      ? `<b>Rolo entra en operación el ${dLong(iniRolo)}.</b> Hasta esa fecha la atribución en 0 % es lo esperado: el agente todavía no está encendido. Las ventas que ves son reales y vienen del CRM.`
-      : `<b>Rolo arrancó el ${dLong(iniRolo)}</b>, pero todavía no hay ventas atribuidas. Puede ser normal los primeros días: la atribución necesita que el cliente compre después de que Rolo lo asesore.`);
+      ? `<b>La IA entra en operación el ${dLong(iniRolo)}.</b> Hasta esa fecha la atribución en 0 % es lo esperado: el agente todavía no está encendido. Las ventas que ves son reales y vienen del CRM.`
+      : `<b>La IA arrancó el ${dLong(iniRolo)}</b>, pero todavía no hay ventas atribuidas. Puede ser normal los primeros días: la atribución necesita que el cliente compre después de que la IA lo asesore.`);
   }
   if (hayEstimadas) {
-    bits.push(`El período <b>marzo–junio 2026</b> corresponde al <b>Rolo v1</b> — una versión <b>deprecada</b> del agente. Sus ventas son un conteo estimado por IA sobre las conversaciones, sin monto ni cliente reales. Se conservan solo para comparar contra el v2 y <b>nunca se suman</b> a la facturación.`);
+    bits.push(`El período <b>marzo–junio 2026</b> corresponde a la <b>IA v1</b> — una versión <b>deprecada</b> del agente. Sus ventas son un conteo estimado por IA sobre las conversaciones, sin monto ni cliente reales. Se conservan solo para comparar contra el v2 y <b>nunca se suman</b> a la facturación.`);
   }
   if ((D.tasas_corregidas||[]).length) {
     const n = D.tasas_corregidas.length;
